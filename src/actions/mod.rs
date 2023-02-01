@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use iyes_loopless::prelude::ConditionSet;
 
 use crate::actions::game_control::{get_movement, GameControl};
 use crate::GameState;
@@ -12,7 +13,10 @@ pub struct ActionsPlugin;
 impl Plugin for ActionsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Actions>().add_system_set(
-            SystemSet::on_update(GameState::Playing).with_system(set_movement_actions),
+            ConditionSet::new()
+                .run_in_state(GameState::Playing)
+                .with_system(set_movement_actions)
+                .into(),
         );
     }
 }

@@ -1,10 +1,10 @@
 [package]
-name = "bevy_game" # ToDo
+name = "vampire_shopire"
 version = "0.1.0"
 publish = false
-authors = ["Niklas Eicker <git@nikl.me>"] # ToDo: you are the author ;)
+authors = ["Noah Shomette", "Kolbe Shomette"]
 edition = "2021"
-exclude = ["dist", "build", "assets", "credits"]
+exclude = ["Shop Management"]
 
 [profile.dev.package."*"]
 opt-level = 3
@@ -17,14 +17,31 @@ lto = true
 codegen-units = 1
 
 [features]
-dev = [
-    "bevy/dynamic",
-]
+dev = []
 
 [dependencies]
-bevy = { version = "0.9", default-features = false, features = ["bevy_asset", "bevy_winit", "render", "png", "x11"] }
+bevy = { version = "0.9.1", default-features = false, features = [
+    "animation",
+    "bevy_asset",
+    "bevy_gilrs",
+    "bevy_scene",
+    "bevy_winit",
+    "render",
+    "png",
+    "hdr",
+    "wav",
+    "x11", ] }
+
 bevy_kira_audio = { version = "0.13" }
-bevy_asset_loader = { version = "0.14" }
+bevy_asset_loader = { version = "0.14.1", features = ["stageless"] }
+iyes_loopless = "0.9.1"
+bevy_mod_aseprite = "0.3"
+leafwing-input-manager = "0.7.1"
+bevy_tiled_camera = "0.5.2"
+seldom_state = "0.3"
+bevy_mod_picking = "0.11.0"
+kayak_ui = "0.2"
+
 rand = { version = "0.8.3" }
 
 # keep the following in sync with Bevy's dependencies
@@ -33,3 +50,4 @@ image = { version = "0.24", default-features = false }
 
 [build-dependencies]
 embed-resource = "1.4"
+

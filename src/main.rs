@@ -5,25 +5,38 @@ use bevy::prelude::*;
 use bevy::window::WindowId;
 use bevy::winit::WinitWindows;
 use bevy::DefaultPlugins;
-use bevy_game::GamePlugin;
+use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins};
+use kayak_ui::prelude::KayakContextPlugin;
+use kayak_ui::widgets::KayakWidgets;
+use seldom_state::StateMachinePlugin;
 use std::io::Cursor;
+use vampire_shopire::GamePlugin;
 use winit::window::Icon;
 
 fn main() {
     App::new()
         .insert_resource(Msaa { samples: 1 })
         .insert_resource(ClearColor(Color::rgb(0.4, 0.4, 0.4)))
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            window: WindowDescriptor {
-                width: 800.,
-                height: 600.,
-                title: "Bevy game".to_string(), // ToDo
-                canvas: Some("#bevy".to_owned()),
-                ..Default::default()
-            },
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    window: WindowDescriptor {
+                        width: 1920.,
+                        height: 1080.,
+                        title: "Vampire Shopire".to_string(), // ToDo
+                        canvas: Some("#bevy".to_owned()),
+                        ..Default::default()
+                    },
+                    ..default()
+                })
+                .set(ImagePlugin::default_nearest()),
+        )
+        .add_plugin(KayakContextPlugin)
+        .add_plugin(KayakWidgets)
+        .add_plugin(StateMachinePlugin)
+        .add_plugins(DefaultPickingPlugins) // <- Adds picking, interaction, and highlighting
         .add_plugin(GamePlugin)
+        .add_plugin(DebugEventsPickingPlugin) // <- Adds debug event logging.
         .add_startup_system(set_window_icon)
         .run();
 }
