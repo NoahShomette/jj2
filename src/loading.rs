@@ -17,7 +17,7 @@ impl Plugin for LoadingPlugin {
                     .with_collection::<FontAssets>()
                     .with_collection::<AudioAssets>()
                     .with_collection::<TextureAssets>()
-                    .continue_to_state(GameState::Menu),
+                    .continue_to_state(GameState::Setup),
             );
     }
 }
@@ -33,8 +33,6 @@ pub struct FontAssets {
 
 #[derive(AssetCollection, Resource)]
 pub struct AudioAssets {
-    #[asset(path = "audio/flying.ogg")]
-    pub flying: Handle<AudioSource>,
 }
 
 #[derive(AssetCollection, Resource)]

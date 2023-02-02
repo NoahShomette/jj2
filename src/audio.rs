@@ -1,7 +1,6 @@
 use bevy::prelude::{App, Assets, Commands, Handle, Plugin, Res, ResMut, Resource};
 use bevy_kira_audio::{Audio, AudioControl, AudioInstance, AudioPlugin, AudioTween, PlaybackState};
 use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet};
-use crate::actions::{Actions};
 use crate::loading::AudioAssets;
 use crate::GameState;
 
@@ -15,7 +14,7 @@ impl Plugin for InternalAudioPlugin {
             .add_system_set(
                 ConditionSet::new()
                     .run_in_state(GameState::Playing)
-                    .with_system(control_flying_sound)
+                    //.with_system(control_flying_sound)
                     .into(),
             );
     }
@@ -25,6 +24,7 @@ impl Plugin for InternalAudioPlugin {
 struct FlyingAudio(Handle<AudioInstance>);
 
 fn start_audio(mut commands: Commands, audio_assets: Res<AudioAssets>, audio: Res<Audio>) {
+    /*
     audio.pause();
     let handle = audio
         .play(audio_assets.flying.clone())
@@ -32,8 +32,10 @@ fn start_audio(mut commands: Commands, audio_assets: Res<AudioAssets>, audio: Re
         .with_volume(0.3)
         .handle();
     commands.insert_resource(FlyingAudio(handle));
+    
+     */
 }
-
+/*
 fn control_flying_sound(
     actions: Res<Actions>,
     audio: Res<FlyingAudio>,
@@ -55,3 +57,5 @@ fn control_flying_sound(
         }
     }
 }
+
+ */

@@ -1,4 +1,3 @@
-use crate::actions::Actions;
 use crate::loading::TextureAssets;
 use crate::GameState;
 use bevy::prelude::*;
@@ -16,27 +15,23 @@ pub struct Player;
 /// Player logic is only active during the State `GameState::Playing`
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_enter_system(GameState::Menu, setup_basics)
-            .add_system_set(
-                ConditionSet::new()
-                    .run_in_state(GameState::Playing)
-                    .into(),
-            );
+        app.add_enter_system(GameState::MainMenu, setup_basics)
+            .add_system_set(ConditionSet::new().run_in_state(GameState::Playing).into());
     }
 }
 #[derive(PartialEq, Clone, Copy, Debug, Default, Component)]
 pub struct CameraMarker;
 
 #[derive(Bundle)]
-pub struct CameraBundle{
+pub struct CameraBundle {
     tiled_camera: TiledCameraBundle,
     camera: CameraMarker,
     picking_camera_bundle: PickingCameraBundle,
 }
 
-impl Default for CameraBundle{
+impl Default for CameraBundle {
     fn default() -> Self {
-        CameraBundle{
+        CameraBundle {
             tiled_camera: TiledCameraBundle::new()
                 .with_pixels_per_tile([16, 16])
                 .with_tile_count([20, 11])
@@ -48,7 +43,7 @@ impl Default for CameraBundle{
     }
 }
 
-
 fn setup_basics(mut commands: Commands) {
+    //commands.spawn(Camera2dBundle::default());
     commands.spawn((CameraBundle::default()));
 }
