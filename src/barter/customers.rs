@@ -1,9 +1,8 @@
 ﻿use bevy::prelude::{Bundle, Component, Entity, Resource};
 use rand::Rng;
 
-
 #[derive(Resource, Default)]
-pub struct CustomerHandler{
+pub struct CustomerHandler {
     pub active_customers: Vec<Entity>,
 }
 

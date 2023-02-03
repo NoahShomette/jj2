@@ -1,14 +1,19 @@
-﻿use crate::barter::{BarterResolutionTypes, BarterResolved};
-use crate::ui::game_scene::scene_ui::{GameMainButtonProps, GameStateButtons};
-use crate::ui::game_scene::UiState;
-use crate::ui::UiColors;
-use crate::PausedState;
-use bevy::app::AppExit;
-use bevy::prelude::{
-    App, Bundle, Color, Commands, Component, Entity, EventWriter, In, Plugin, Query, Res,
+﻿use crate::barter::{
+    BarterAttemptEvent, BarterAttemptResult, BarterAttemptResultEvent, BarterResolutionTypes,
+    BarterResolved, BarterTypes,
 };
-use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet, NextState};
-use kayak_ui::prelude::{widgets::*, *};
+use crate::loading::FontAssets;
+use crate::ui::game_scene::scene_ui::GameStateButtons::Barter;
+use crate::ui::game_scene::scene_ui::{GameMainButtonProps, GameStateButtons, GameUi};
+use crate::ui::{UiColors, UiState};
+use crate::{GameState, PausedState};
+use bevy::app::AppExit;
+use bevy::ecs::system::EntityCommands;
+use bevy::prelude::*;
+use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet, CurrentState, NextState};
+use std::ops::DerefMut;
+use std::process::id;
+use std::thread::spawn;
 
 pub struct BarterUiPlugin;
 
@@ -17,176 +22,36 @@ pub struct BarterUiPlugin;
 impl Plugin for BarterUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_enter_system(UiState::Barter, setup_barter_ui)
+            .add_exit_system(UiState::Barter, cleanup_barter_ui)
+            .add_system_set(
+                ConditionSet::new()
+                    .run_on_event::<BarterAttemptResultEvent>()
+                    .with_system(spawn_barter_result)
+                    .into(),
+            )
             .add_system_set(
                 ConditionSet::new()
                     .run_in_state(UiState::Barter)
                     .run_in_state(PausedState::Playing)
+                    .with_system(click_barter_control_button)
+                    .with_system(click_barter_button)
                     .into(),
             );
     }
 }
 
 #[derive(Component, Clone, PartialEq, Default)]
+pub struct ResolutionUiParent;
+
+#[derive(Component, Clone, PartialEq)]
 pub struct BarterButtonProps {
-    barter_button_type: BarterButtonType,
-    background_color: Color,
-}
-
-impl Widget for BarterButtonProps {}
-
-impl BarterButtonProps {
-    pub fn get_button_text(&self) -> String {
-        return match self.barter_button_type {
-            BarterButtonType::Bully => String::from("Bully"),
-            BarterButtonType::Persuade => String::from("Persuade"),
-            BarterButtonType::Plea => String::from("Plea"),
-        };
-    }
-}
-
-#[derive(Clone, PartialEq, Default)]
-pub enum BarterButtonType {
-    #[default]
-    Bully,
-    Persuade,
-    Plea,
-}
-
-#[derive(Bundle)]
-pub struct BarterButtonBundle {
-    pub props: BarterButtonProps,
-    pub styles: KStyle,
-    pub computed_styles: ComputedStyles,
-    pub children: KChildren,
-    // This allows us to hook into on click events!
-    pub on_event: OnEvent,
-    // Widget name is required by Kayak UI!
-    pub widget_name: WidgetName,
-}
-
-impl Default for BarterButtonBundle {
-    fn default() -> Self {
-        Self {
-            props: BarterButtonProps::default(),
-            styles: KStyle::default(),
-            computed_styles: ComputedStyles::default(),
-            children: KChildren::default(),
-            on_event: OnEvent::default(),
-            // Kayak uses this component to find out more information about your widget.
-            // This is done because bevy does not have the ability to query traits.
-            widget_name: BarterButtonProps::default().get_name(),
-        }
-    }
-}
-
-fn barter_button_render(
-    In((mut widget_context, entity)): In<(KayakWidgetContext, Entity)>,
-    mut commands: Commands,
-    colors: Res<UiColors>,
-    mut menu_button_query: Query<&mut BarterButtonProps>,
-    state_query: Query<&ButtonState>,
-) -> bool {
-    let state_entity =
-        widget_context.use_state(&mut commands, entity, ButtonState { hovering: false });
-
-    let mut button_props = menu_button_query.get_mut(entity).unwrap();
-    let button_text = button_props.get_button_text();
-
-    let on_event = OnEvent::new(
-        move |In((event_dispatcher_context, _, mut event, _entity)): In<(
-            EventDispatcherContext,
-            WidgetState,
-            Event,
-            Entity,
-        )>,
-              mut query: Query<&mut ButtonState>,
-              mut menu_button_query: Query<&mut BarterButtonProps>,
-              mut commands: Commands,
-              mut exit_event: EventWriter<AppExit>| {
-            let button_props = menu_button_query.get_mut(entity).unwrap();
-
-            if let Ok(mut button) = query.get_mut(state_entity) {
-                match event.event_type {
-                    EventType::MouseIn(..) => {
-                        event.stop_propagation();
-                        button.hovering = true;
-                    }
-                    EventType::MouseOut(..) => {
-                        button.hovering = false;
-                    }
-                    EventType::Click(event) => {
-                        match button_props.barter_button_type {
-                            BarterButtonType::Bully => {}
-                            BarterButtonType::Persuade => {}
-                            BarterButtonType::Plea => {}
-                        };
-                    }
-                    _ => {}
-                }
-            }
-            (event_dispatcher_context, event)
-        },
-    );
-
-    if let Ok(button_state) = state_query.get(state_entity) {
-        if button_state.hovering {
-            button_props.background_color = colors.button_hovered
-        } else {
-            button_props.background_color = colors.button_standard
-        };
-
-        let button_style = KStyle {
-            // Lets use red for our button background!
-            background_color: StyleProp::Value(button_props.background_color),
-            // 50 pixel border radius.
-            border_radius: Corner::all(5.0).into(),
-            width: StyleProp::from(Units::Pixels(120.0)),
-            height: StyleProp::from(Units::Pixels(50.0)),
-            left: StyleProp::from(Units::Stretch(1.0)),
-            right: StyleProp::from(Units::Stretch(1.0)),
-            top: StyleProp::from(Units::Stretch(1.0)),
-            bottom: StyleProp::from(Units::Stretch(1.0)),
-            layout_type: StyleProp::from(LayoutType::Column),
-            ..Default::default()
-        };
-
-        let parent_id = Some(entity);
-
-        rsx! {
-            <BackgroundBundle
-                styles={button_style}
-                on_event={on_event}
-            >
-               <TextWidgetBundle
-                    styles={KStyle {
-                        top: Units::Stretch(1.0).into(),
-                        bottom: Units::Stretch(1.0).into(),
-                        ..Default::default()
-                    }}
-                    text={TextProps {
-                        content: button_text,
-                        alignment: Alignment::Middle,
-                        size: 20.0,
-                        ..Default::default()
-                    }}
-                />
-            </BackgroundBundle>
-        };
-    }
-
-    // The boolean returned here tells kayak UI to update the tree. You can avoid tree updates by
-    // returning false, but in practice this should be done rarely. As kayak diff's the tree and
-    // will avoid tree updates if nothing has changed!
-    true
+    barter_button_type: BarterTypes,
 }
 
 #[derive(Component, Clone, PartialEq, Default)]
 pub struct BarterControlButtonProps {
     control_button_type: BarterResolutionTypes,
-    background_color: Color,
 }
-
-impl Widget for BarterControlButtonProps {}
 
 impl BarterControlButtonProps {
     pub fn get_button_text(&self) -> String {
@@ -197,251 +62,603 @@ impl BarterControlButtonProps {
     }
 }
 
-#[derive(Bundle)]
-pub struct BarterControlButtonBundle {
-    pub props: BarterControlButtonProps,
-    pub styles: KStyle,
-    pub computed_styles: ComputedStyles,
-    pub children: KChildren,
-    // This allows us to hook into on click events!
-    pub on_event: OnEvent,
-    // Widget name is required by Kayak UI!
-    pub widget_name: WidgetName,
+#[derive(Component, Default, PartialEq, Clone)]
+pub struct BarterUi;
+
+fn setup_barter_ui(mut commands: Commands, font_assets: Res<FontAssets>, colors: Res<UiColors>) {
+    // root bundle
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                position_type: PositionType::Absolute,
+                ..default()
+            },
+            ..default()
+        })
+        .insert(BarterUi)
+        .with_children(|parent| {
+            // main background and holder for barter ui
+
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        size: Size::new(Val::Percent(75.0), Val::Percent(80.0)),
+                        justify_content: JustifyContent::SpaceBetween,
+                        position_type: PositionType::Absolute,
+                        ..default()
+                    },
+                    background_color: Color::rgb(0.65, 0.65, 0.65).into(),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    // left side of barter screen
+                    setup_left_barter_screen(parent, &font_assets, &colors);
+
+                    // center of barter screen
+                    setup_middle_barter_screen(parent, &font_assets, &colors);
+
+                    // right side of barter screen
+                    setup_right_barter_screen(parent, &font_assets, &colors);
+                });
+        });
 }
 
-impl Default for BarterControlButtonBundle {
-    fn default() -> Self {
-        Self {
-            props: BarterControlButtonProps::default(),
-            styles: KStyle::default(),
-            computed_styles: ComputedStyles::default(),
-            children: KChildren::default(),
-            on_event: OnEvent::default(),
-            // Kayak uses this component to find out more information about your widget.
-            // This is done because bevy does not have the ability to query traits.
-            widget_name: BarterControlButtonProps::default().get_name(),
+fn setup_left_barter_screen(
+    parent: &mut ChildBuilder,
+    font_assets: &Res<FontAssets>,
+    colors: &Res<UiColors>,
+) -> Entity {
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(20.0), Val::Percent(100.0)),
+                justify_content: JustifyContent::SpaceBetween,
+                position_type: PositionType::Relative,
+                ..default()
+            },
+            background_color: Color::rgb(0.65, 0.65, 0.65).into(),
+            ..default()
+        })
+        .with_children(|parent| {
+            // Bottom meta options
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                        justify_content: JustifyContent::FlexEnd,
+                        position_type: PositionType::Relative,
+                        flex_direction: FlexDirection::Column,
+                        ..default()
+                    },
+                    background_color: Color::rgb(0.65, 0.65, 0.65).into(),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    parent
+                        .spawn(ButtonBundle {
+                            style: Style {
+                                size: Size::new(Val::Percent(100.0), Val::Auto),
+                                padding: UiRect::all(Val::Px(15.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..Default::default()
+                            },
+                            background_color: colors.button_standard.into(),
+                            ..Default::default()
+                        })
+                        .insert(BarterButtonProps {
+                            barter_button_type: BarterTypes::Bully,
+                        })
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle {
+                                text: Text {
+                                    sections: vec![TextSection {
+                                        value: BarterTypes::get_string_name(BarterTypes::Bully),
+                                        style: TextStyle {
+                                            font: font_assets.fira_sans.clone(),
+                                            font_size: 40.0,
+                                            color: Color::rgb(0.9, 0.9, 0.9),
+                                        },
+                                    }],
+                                    alignment: Default::default(),
+                                },
+                                ..Default::default()
+                            });
+                        });
+
+                    parent
+                        .spawn(ButtonBundle {
+                            style: Style {
+                                size: Size::new(Val::Percent(100.0), Val::Auto),
+                                padding: UiRect::all(Val::Px(15.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..Default::default()
+                            },
+                            background_color: colors.button_standard.into(),
+                            ..Default::default()
+                        })
+                        .insert(BarterButtonProps {
+                            barter_button_type: BarterTypes::Plea,
+                        })
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle {
+                                text: Text {
+                                    sections: vec![TextSection {
+                                        value: BarterTypes::get_string_name(BarterTypes::Plea),
+                                        style: TextStyle {
+                                            font: font_assets.fira_sans.clone(),
+                                            font_size: 40.0,
+                                            color: Color::rgb(0.9, 0.9, 0.9),
+                                        },
+                                    }],
+                                    alignment: Default::default(),
+                                },
+                                ..Default::default()
+                            });
+                        });
+
+                    parent
+                        .spawn(ButtonBundle {
+                            style: Style {
+                                size: Size::new(Val::Percent(100.0), Val::Auto),
+                                padding: UiRect::all(Val::Px(15.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..Default::default()
+                            },
+                            background_color: colors.button_standard.into(),
+                            ..Default::default()
+                        })
+                        .insert(BarterButtonProps {
+                            barter_button_type: BarterTypes::Persuade,
+                        })
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle {
+                                text: Text {
+                                    sections: vec![TextSection {
+                                        value: BarterTypes::get_string_name(BarterTypes::Persuade),
+                                        style: TextStyle {
+                                            font: font_assets.fira_sans.clone(),
+                                            font_size: 40.0,
+                                            color: Color::rgb(0.9, 0.9, 0.9),
+                                        },
+                                    }],
+                                    alignment: Default::default(),
+                                },
+                                ..Default::default()
+                            });
+                        });
+                });
+        })
+        .id()
+}
+
+fn setup_middle_barter_screen(
+    parent: &mut ChildBuilder,
+    font_assets: &Res<FontAssets>,
+    colors: &Res<UiColors>,
+) -> Entity {
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(60.0), Val::Percent(100.0)),
+                justify_content: JustifyContent::FlexEnd,
+                position_type: PositionType::Relative,
+                flex_direction: FlexDirection::Column,
+                overflow: Overflow::Hidden,
+                ..default()
+            },
+            background_color: Color::rgb(0.0, 0.65, 0.65).into(),
+            ..default()
+        })
+        .insert(ResolutionUiParent)
+        .id()
+}
+
+fn setup_right_barter_screen(
+    parent: &mut ChildBuilder,
+    font_assets: &Res<FontAssets>,
+    colors: &Res<UiColors>,
+) -> Entity {
+    let entity = parent
+        .spawn(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(20.0), Val::Percent(100.0)),
+                justify_content: JustifyContent::SpaceBetween,
+                position_type: PositionType::Relative,
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            background_color: Color::rgb(0.65, 0.65, 0.65).into(),
+            ..default()
+        })
+        .with_children(|parent| {
+            // top right side stuff
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                        justify_content: JustifyContent::FlexStart,
+                        position_type: PositionType::Relative,
+                        flex_direction: FlexDirection::Column,
+                        ..default()
+                    },
+                    background_color: Color::rgb(0.65, 0.65, 0.65).into(),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    parent
+                        .spawn(ButtonBundle {
+                            style: Style {
+                                size: Size::new(Val::Percent(100.0), Val::Auto),
+                                padding: UiRect::all(Val::Px(15.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..Default::default()
+                            },
+                            background_color: colors.button_standard.into(),
+                            ..Default::default()
+                        })
+                        .insert(BarterControlButtonProps {
+                            control_button_type: BarterResolutionTypes::Approve { amount: 0 },
+                        })
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle {
+                                text: Text {
+                                    sections: vec![TextSection {
+                                        value: "Approve".to_string(),
+                                        style: TextStyle {
+                                            font: font_assets.fira_sans.clone(),
+                                            font_size: 40.0,
+                                            color: Color::rgb(0.9, 0.9, 0.9),
+                                        },
+                                    }],
+                                    alignment: Default::default(),
+                                },
+                                ..Default::default()
+                            });
+                        });
+
+                    parent
+                        .spawn(ButtonBundle {
+                            style: Style {
+                                size: Size::new(Val::Percent(100.0), Val::Auto),
+                                padding: UiRect::all(Val::Px(15.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..Default::default()
+                            },
+                            background_color: colors.button_standard.into(),
+                            ..Default::default()
+                        })
+                        .insert(BarterControlButtonProps {
+                            control_button_type: BarterResolutionTypes::Deny,
+                        })
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle {
+                                text: Text {
+                                    sections: vec![TextSection {
+                                        value: "Deny".to_string(),
+                                        style: TextStyle {
+                                            font: font_assets.fira_sans.clone(),
+                                            font_size: 40.0,
+                                            color: Color::rgb(0.9, 0.9, 0.9),
+                                        },
+                                    }],
+                                    alignment: Default::default(),
+                                },
+                                ..Default::default()
+                            });
+                        });
+                });
+            // Bottom meta options
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                        justify_content: JustifyContent::FlexEnd,
+                        position_type: PositionType::Relative,
+                        flex_direction: FlexDirection::Column,
+                        ..default()
+                    },
+                    background_color: Color::rgb(0.65, 0.65, 0.65).into(),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    parent
+                        .spawn(ButtonBundle {
+                            style: Style {
+                                size: Size::new(Val::Percent(100.0), Val::Auto),
+                                padding: UiRect::all(Val::Px(15.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..Default::default()
+                            },
+                            background_color: colors.button_standard.into(),
+                            ..Default::default()
+                        })
+                        .insert(BarterControlButtonProps {
+                            control_button_type: BarterResolutionTypes::Approve { amount: 0 },
+                        })
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle {
+                                text: Text {
+                                    sections: vec![TextSection {
+                                        value: "Approve".to_string(),
+                                        style: TextStyle {
+                                            font: font_assets.fira_sans.clone(),
+                                            font_size: 40.0,
+                                            color: Color::rgb(0.9, 0.9, 0.9),
+                                        },
+                                    }],
+                                    alignment: Default::default(),
+                                },
+                                ..Default::default()
+                            });
+                        });
+
+                    parent
+                        .spawn(ButtonBundle {
+                            style: Style {
+                                size: Size::new(Val::Percent(100.0), Val::Auto),
+                                padding: UiRect::all(Val::Px(15.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..Default::default()
+                            },
+                            background_color: colors.button_standard.into(),
+                            ..Default::default()
+                        })
+                        .insert(BarterControlButtonProps {
+                            control_button_type: BarterResolutionTypes::Deny,
+                        })
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle {
+                                text: Text {
+                                    sections: vec![TextSection {
+                                        value: "Deny".to_string(),
+                                        style: TextStyle {
+                                            font: font_assets.fira_sans.clone(),
+                                            font_size: 40.0,
+                                            color: Color::rgb(0.9, 0.9, 0.9),
+                                        },
+                                    }],
+                                    alignment: Default::default(),
+                                },
+                                ..Default::default()
+                            });
+                        });
+                });
+        })
+        .id();
+
+    entity
+}
+
+fn spawn_barter_result(
+    parent: Query<Entity, With<ResolutionUiParent>>,
+    mut commands: Commands,
+    mut result: EventReader<BarterAttemptResultEvent>,
+    font_assets: Res<FontAssets>,
+    colors: Res<UiColors>,
+) {
+    let parent = parent.single();
+
+    commands.entity(parent).with_children(|parent| {
+        for event in result.iter() {
+            match event.result {
+                BarterAttemptResult::Success => {
+                    // spawn in two parts so that its split up and we have a border
+                    parent
+                        // main holder node
+                        .spawn(NodeBundle {
+                            style: Style {
+                                size: Size::new(Val::Percent(100.0), Val::Auto),
+                                margin: UiRect::all(Val::Px(20.0)),
+                                justify_content: JustifyContent::FlexStart,
+                                align_items: AlignItems::Center,
+                                position_type: PositionType::Relative,
+                                ..default()
+                            },
+                            ..default()
+                        })
+                        .with_children(|parent| {
+                            parent
+                                // big holder that is hidden for background border
+                                .spawn(NodeBundle {
+                                    style: Style {
+                                        size: Size::new(Val::Percent(65.0), Val::Percent(100.0)),
+                                        justify_content: JustifyContent::SpaceBetween,
+                                        position_type: PositionType::Relative,
+                                        ..default()
+                                    },
+                                    background_color: Color::rgb(1.0, 1.0, 1.0).into(),
+                                    ..default()
+                                })
+                                .with_children(|parent| {
+                                    // actual interior that we want to use
+                                    parent
+                                        .spawn(NodeBundle {
+                                            style: Style {
+                                                size: Size::new(Val::Percent(95.0), Val::Percent(95.0)),
+                                                justify_content: JustifyContent::SpaceBetween,
+                                                flex_direction: FlexDirection::Column,
+                                                position_type: PositionType::Relative,
+                                                ..default()
+                                            },
+                                            background_color: Color::rgb(1.0, 1.0, 1.0).into(),
+                                            ..default()
+                                        })
+                                        .with_children(|parent| {
+                                            // Result text
+                                            parent
+                                                .spawn(NodeBundle {
+                                                    style: Style {
+                                                        size: Size::new(Val::Percent(100.0), Val::Auto),
+                                                        justify_content: JustifyContent::FlexStart,
+                                                        position_type: PositionType::Relative,
+                                                        ..default()
+                                                    },
+                                                    background_color: colors.success.into(),
+                                                    ..default()
+                                                })
+                                                .with_children(|parent| {
+                                                    parent.spawn(TextBundle {
+                                                        text: Text {
+                                                            sections: vec![TextSection {
+                                                                value: String::from(format!(
+                                                                    "{} Success!",
+                                                                    event
+                                                                        .attempt_type
+                                                                        .get_string_name_from_instance()
+                                                                )),
+                                                                style: TextStyle {
+                                                                    font: font_assets.fira_sans.clone(),
+                                                                    font_size: 40.0,
+                                                                    color: Color::rgb(1.0, 1.0, 1.0),
+                                                                },
+                                                            }],
+                                                            alignment: Default::default(),
+                                                        },
+                                                        ..Default::default()
+                                                    });
+                                                });
+
+                                            // amount
+                                            parent
+                                                .spawn(NodeBundle {
+                                                    style: Style {
+                                                        size: Size::new(Val::Percent(100.0), Val::Auto),
+                                                        justify_content: JustifyContent::FlexStart,
+                                                        position_type: PositionType::Relative,
+                                                        ..default()
+                                                    },
+                                                    background_color: Color::rgb(1.0, 1.0, 1.0).into(),
+                                                    ..default()
+                                                })
+                                                .with_children(|parent| {
+                                                    parent.spawn(TextBundle {
+                                                        text: Text {
+                                                            sections: vec![TextSection {
+                                                                value: String::from(format!(
+                                                                    "New Price: {} gold",
+                                                                    event.new_price
+                                                                )),
+                                                                style: TextStyle {
+                                                                    font: font_assets.fira_sans.clone(),
+                                                                    font_size: 40.0,
+                                                                    color: Color::rgb(0.0, 0.0, 0.0),
+                                                                },
+                                                            }],
+                                                            alignment: Default::default(),
+                                                        },
+                                                        ..Default::default()
+                                                    });
+                                                });
+                                        });
+                                });
+                        });
+                }
+                BarterAttemptResult::Failure => {}
+            }
+        }
+    });
+}
+
+fn click_barter_control_button(
+    mut commands: Commands,
+    button_colors: Res<UiColors>,
+    mut interaction_query: Query<
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &BarterControlButtonProps,
+        ),
+        (Changed<Interaction>, With<Button>),
+    >,
+) {
+    for (interaction, mut color, props) in &mut interaction_query {
+        match *interaction {
+            Interaction::Hovered => {
+                *color = button_colors.button_hovered.into();
+            }
+            Interaction::None => {
+                *color = button_colors.button_standard.into();
+            }
+            _ => {}
+        }
+        match props.control_button_type {
+            BarterResolutionTypes::Approve { .. } => {
+                if let Interaction::Clicked = interaction {
+                    commands.insert_resource(NextState(UiState::Normal));
+                }
+            }
+            BarterResolutionTypes::Deny => {
+                if let Interaction::Clicked = interaction {
+                    commands.insert_resource(NextState(UiState::Normal));
+                }
+            }
         }
     }
 }
 
-fn control_button_render(
-    In((mut widget_context, entity)): In<(KayakWidgetContext, Entity)>,
+fn click_barter_button(
     mut commands: Commands,
-    colors: Res<UiColors>,
-    mut menu_button_query: Query<&mut BarterControlButtonProps>,
-    state_query: Query<&ButtonState>,
-) -> bool {
-    let state_entity =
-        widget_context.use_state(&mut commands, entity, ButtonState { hovering: false });
-
-    let mut button_props = menu_button_query.get_mut(entity).unwrap();
-    let button_text = button_props.get_button_text();
-
-    let on_event = OnEvent::new(
-        move |In((event_dispatcher_context, _, mut event, _entity)): In<(
-            EventDispatcherContext,
-            WidgetState,
-            Event,
-            Entity,
-        )>,
-              mut query: Query<&mut ButtonState>,
-              mut menu_button_query: Query<&mut BarterControlButtonProps>,
-              mut commands: Commands,
-              mut barter_resolution_event: EventWriter<BarterResolved>,
-              mut exit_event: EventWriter<AppExit>| {
-            let button_props = menu_button_query.get_mut(entity).unwrap();
-
-            if let Ok(mut button) = query.get_mut(state_entity) {
-                match event.event_type {
-                    EventType::MouseIn(..) => {
-                        event.stop_propagation();
-                        button.hovering = true;
-                    }
-                    EventType::MouseOut(..) => {
-                        button.hovering = false;
-                    }
-                    EventType::Click(event) => {
-                        match button_props.control_button_type {
-                            BarterResolutionTypes::Approve { amount } => {
-                                barter_resolution_event.send(BarterResolved {
-                                    resolution_type: BarterResolutionTypes::Approve {
-                                        amount: amount,
-                                    },
-                                });
-                                commands.insert_resource(NextState(UiState::Normal));
-                            }
-                            BarterResolutionTypes::Deny => {
-                                barter_resolution_event.send(BarterResolved {
-                                    resolution_type: BarterResolutionTypes::Deny {},
-                                });
-                                commands.insert_resource(NextState(UiState::Normal));
-                            }
-                        };
-                    }
-                    _ => {}
+    button_colors: Res<UiColors>,
+    mut barter_attempt: EventWriter<BarterAttemptResultEvent>,
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor, &BarterButtonProps),
+        (Changed<Interaction>, With<Button>),
+    >,
+) {
+    for (interaction, mut color, props) in &mut interaction_query {
+        match *interaction {
+            Interaction::Hovered => {
+                *color = button_colors.button_hovered.into();
+            }
+            Interaction::None => {
+                *color = button_colors.button_standard.into();
+            }
+            _ => {}
+        }
+        match props.barter_button_type {
+            BarterTypes::Bully => {
+                if let Interaction::Clicked = interaction {
+                    barter_attempt.send(BarterAttemptResultEvent {
+                        result: BarterAttemptResult::Success,
+                        attempt_type: BarterTypes::Bully,
+                        new_price: 50,
+                    })
                 }
             }
-            (event_dispatcher_context, event)
-        },
-    );
-
-    if let Ok(button_state) = state_query.get(state_entity) {
-        if button_state.hovering {
-            button_props.background_color = colors.button_hovered
-        } else {
-            button_props.background_color = colors.button_standard
-        };
-
-        let button_style = KStyle {
-            // Lets use red for our button background!
-            background_color: StyleProp::Value(button_props.background_color),
-            // 50 pixel border radius.
-            border_radius: Corner::all(5.0).into(),
-            width: StyleProp::from(Units::Pixels(120.0)),
-            height: StyleProp::from(Units::Pixels(50.0)),
-            left: StyleProp::from(Units::Stretch(1.0)),
-            right: StyleProp::from(Units::Stretch(1.0)),
-            top: StyleProp::from(Units::Stretch(1.0)),
-            bottom: StyleProp::from(Units::Stretch(1.0)),
-            layout_type: StyleProp::from(LayoutType::Column),
-            ..Default::default()
-        };
-
-        let parent_id = Some(entity);
-
-        rsx! {
-            <BackgroundBundle
-                styles={button_style}
-                on_event={on_event}
-            >
-               <TextWidgetBundle
-                    styles={KStyle {
-                        top: Units::Stretch(1.0).into(),
-                        bottom: Units::Stretch(1.0).into(),
-                        ..Default::default()
-                    }}
-                    text={TextProps {
-                        content: button_text,
-                        alignment: Alignment::Middle,
-                        size: 20.0,
-                        ..Default::default()
-                    }}
-                />
-            </BackgroundBundle>
-        };
+            BarterTypes::Persuade => {
+                if let Interaction::Clicked = interaction {
+                    barter_attempt.send(BarterAttemptResultEvent {
+                        result: BarterAttemptResult::Success,
+                        attempt_type: BarterTypes::Persuade,
+                        new_price: 50,
+                    })
+                }
+            }
+            BarterTypes::Plea => {
+                if let Interaction::Clicked = interaction {
+                    barter_attempt.send(BarterAttemptResultEvent {
+                        result: BarterAttemptResult::Failure,
+                        attempt_type: BarterTypes::Plea,
+                        new_price: 40,
+                    })
+                }
+            }
+        }
     }
-
-    // The boolean returned here tells kayak UI to update the tree. You can avoid tree updates by
-    // returning false, but in practice this should be done rarely. As kayak diff's the tree and
-    // will avoid tree updates if nothing has changed!
-    true
 }
 
-pub fn setup_barter_ui(
-    mut commands: Commands,
-    colors: Res<UiColors>,
-    mut widget_context: Query<&mut KayakRootContext>,
-) {
-    let mut widget_context = widget_context.single_mut();
-
-    widget_context.add_widget_data::<BarterButtonProps, ButtonState>();
-    // Next we need to add the systems
-    widget_context.add_widget_system(
-        // We are registering these systems with a specific WidgetName.
-        BarterButtonProps::default().get_name(),
-        // widget_update auto diffs props and state.
-        // Optionally if you have context you can use: widget_update_with_context
-        // otherwise you will need to create your own widget update system!
-        widget_update::<BarterButtonProps, ButtonState>,
-        // Add our render system!
-        barter_button_render,
-    );
-
-    widget_context.add_widget_data::<BarterControlButtonProps, ButtonState>();
-    // Next we need to add the systems
-    widget_context.add_widget_system(
-        // We are registering these systems with a specific WidgetName.
-        BarterControlButtonProps::default().get_name(),
-        // widget_update auto diffs props and state.
-        // Optionally if you have context you can use: widget_update_with_context
-        // otherwise you will need to create your own widget update system!
-        widget_update::<BarterControlButtonProps, ButtonState>,
-        // Add our render system!
-        control_button_render,
-    );
-
-    let background_style = KStyle {
-        background_color: StyleProp::Value(colors.background_standard),
-        border_radius: Corner::all(50.0).into(),
-        width: StyleProp::from(Units::Percentage(75.)),
-        height: StyleProp::from(Units::Percentage(75.)),
-        left: StyleProp::from(Units::Stretch(1.0)),
-        right: StyleProp::from(Units::Stretch(1.0)),
-        top: StyleProp::from(Units::Stretch(1.0)),
-        bottom: StyleProp::from(Units::Stretch(1.0)),
-        padding: Edge::new(
-            Units::Pixels(20.0),
-            Units::Pixels(20.0),
-            Units::Pixels(20.0),
-            Units::Pixels(20.0),
-        )
-        .into(),
-        ..KStyle::default()
-    };
-
-    let parent_id = None;
-    rsx! {
-        <KayakAppBundle>
-        <BackgroundBundle
-                styles={background_style.clone()}
-            >
-                <BarterControlButtonBundle
-                    props={
-                        BarterControlButtonProps{
-                            //TODO Update this to take the current price and use it to display how much
-                            control_button_type: BarterResolutionTypes::Approve {amount: 0},
-                            background_color: colors.button_standard,
-                        }
-                    }
-                />
-                <BarterControlButtonBundle
-                    props={
-                        BarterControlButtonProps{
-                            control_button_type: BarterResolutionTypes::Deny{},
-                            background_color: colors.button_standard,
-                        }
-                    }
-                />
-            </BackgroundBundle>
-           <BackgroundBundle
-                styles={background_style.clone()}
-            >
-                <BarterButtonBundle
-                    props={
-                        BarterButtonProps{
-                            barter_button_type: BarterButtonType::Bully,
-                            background_color: colors.button_standard,
-                        }
-                    }
-                />
-                <BarterButtonBundle
-                    props={
-                        BarterButtonProps{
-                            barter_button_type: BarterButtonType::Persuade,
-                            background_color: colors.button_standard,
-                        }
-                    }
-                />
-                <BarterButtonBundle
-                    props={
-                        BarterButtonProps{
-                            barter_button_type: BarterButtonType::Plea,
-                            background_color: colors.button_standard,
-                        }
-                    }
-                />
-            </BackgroundBundle>
-
-        </KayakAppBundle>
-    };
+fn cleanup_barter_ui(mut commands: Commands, button: Query<Entity, With<BarterUi>>) {
+    for button in button.iter() {
+        commands.entity(button).despawn_recursive();
+    }
 }

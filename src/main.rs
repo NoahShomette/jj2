@@ -5,9 +5,6 @@ use bevy::prelude::*;
 use bevy::window::WindowId;
 use bevy::winit::WinitWindows;
 use bevy::DefaultPlugins;
-use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins};
-use kayak_ui::prelude::KayakContextPlugin;
-use kayak_ui::widgets::KayakWidgets;
 use seldom_state::StateMachinePlugin;
 use std::io::Cursor;
 use vampire_shopire::GamePlugin;
@@ -31,12 +28,8 @@ fn main() {
                 })
                 .set(ImagePlugin::default_nearest()),
         )
-        .add_plugin(KayakContextPlugin)
-        .add_plugin(KayakWidgets)
         .add_plugin(StateMachinePlugin)
-        .add_plugins(DefaultPickingPlugins) // <- Adds picking, interaction, and highlighting
         .add_plugin(GamePlugin)
-        .add_plugin(DebugEventsPickingPlugin) // <- Adds debug event logging.
         .add_startup_system(set_window_icon)
         .run();
 }

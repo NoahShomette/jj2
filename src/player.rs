@@ -1,8 +1,6 @@
-use crate::loading::TextureAssets;
 use crate::GameState;
 use bevy::prelude::*;
 use bevy::sprite::MaterialMesh2dBundle;
-use bevy_mod_picking::{PickableBundle, PickingCameraBundle};
 use bevy_tiled_camera::{TiledCameraBundle, WorldSpace};
 use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet};
 
@@ -26,7 +24,6 @@ pub struct CameraMarker;
 pub struct CameraBundle {
     tiled_camera: TiledCameraBundle,
     camera: CameraMarker,
-    picking_camera_bundle: PickingCameraBundle,
 }
 
 impl Default for CameraBundle {
@@ -38,7 +35,6 @@ impl Default for CameraBundle {
                 .with_world_space(WorldSpace::Pixels)
                 .with_clear_color(Color::hex("090a14").expect("Color not valid hex")),
             camera: Default::default(),
-            picking_camera_bundle: PickingCameraBundle::default(),
         }
     }
 }

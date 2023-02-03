@@ -39,9 +39,6 @@ bevy_mod_aseprite = "0.3"
 leafwing-input-manager = "0.7.1"
 bevy_tiled_camera = "0.5.2"
 seldom_state = "0.3"
-bevy_mod_picking = "0.11.0"
-kayak_ui = "0.2"
-
 rand = { version = "0.8.3" }
 
 # keep the following in sync with Bevy's dependencies

@@ -5,9 +5,6 @@ use bevy::prelude::{
     App, AssetServer, Bundle, Color, Commands, Component, Plugin, Res, ResMut, Resource,
 };
 use iyes_loopless::prelude::AppLooplessStateExt;
-use kayak_ui::prelude::{widgets::*, *};
-use kayak_ui::widgets::KayakWidgetsContextPlugin;
-use kayak_ui::UICameraBundle;
 
 pub mod game_scene;
 pub mod menu;
@@ -20,22 +17,27 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<UiColors>()
             .add_enter_system(GameState::Setup, ui_setup);
+        app.insert_resource(SceneUiState::default())
+            .add_loopless_state(UiState::Normal);
         app.add_plugin(MenuPlugin).add_plugin(SceneUiPlugin);
     }
 }
 
-pub fn ui_setup(
-    mut commands: Commands,
-    mut font_mapping: ResMut<FontMapping>,
-    asset_server: Res<AssetServer>,
-) {
-    font_mapping.set_default(asset_server.load("abaddon_bold.kayak_font"));
+#[derive(Resource, Default)]
+pub struct SceneUiState {
+    ui_state: UiState,
+}
 
-    let mut widget_context = KayakRootContext::new();
-    widget_context.add_plugin(KayakWidgetsContextPlugin);
+#[derive(Default, Clone, Eq, PartialEq, Debug, Hash)]
+pub enum UiState {
+    #[default]
+    Normal,
+    Barter,
+    Purchase,
+    Pause,
+}
 
-    commands.spawn(UICameraBundle::new(widget_context));
-
+pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     println!("{}", ((104 - 0) as f32 / (255 - 0) as f32));
 }
 
@@ -45,6 +47,9 @@ pub struct UiColors {
 
     button_standard: Color,
     button_hovered: Color,
+    
+    success: Color,
+    failure: Color,
 }
 
 impl Default for UiColors {
@@ -64,6 +69,16 @@ impl Default for UiColors {
                 (215 - 0) as f32 / (255 - 0) as f32,
                 (118 - 0) as f32 / (255 - 0) as f32,
                 (67 - 0) as f32 / (255 - 0) as f32,
+            ),
+            success:  Color::rgb(
+                (60 - 0) as f32 / (255 - 0) as f32,
+                (163 - 0) as f32 / (255 - 0) as f32,
+                (112 - 0) as f32 / (255 - 0) as f32,
+            ),
+            failure:  Color::rgb(
+                (186 - 0) as f32 / (255 - 0) as f32,
+                (59 - 0) as f32 / (255 - 0) as f32,
+                (70 - 0) as f32 / (255 - 0) as f32,
             ),
         }
     }

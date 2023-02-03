@@ -1,30 +1,37 @@
-use bevy::app::AppExit;
+use crate::barter::BarterResolutionTypes;
 use crate::loading::FontAssets;
-use crate::ui::{UiColors};
+use crate::ui::game_scene::barter_screen::{BarterControlButtonProps, BarterUi};
+use crate::ui::UiColors;
 use crate::GameState;
+use bevy::app::AppExit;
 use bevy::prelude::*;
+use bevy::render::render_graph::Edge;
+use bevy_tiled_camera::WorldSpace::Units;
 use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet};
-use iyes_loopless::state::NextState;
-use kayak_ui::prelude::{widgets::*, *};
+use iyes_loopless::state::{CurrentState, NextState};
 
 pub struct MenuPlugin;
 
-/// 
+///
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.add_enter_system(GameState::MainMenu, setup_menu)
+            .add_exit_system(GameState::MainMenu, cleanup_menu)
             .add_system_set(
                 ConditionSet::new()
                     .run_in_state(GameState::MainMenu)
+                    .with_system(click_play_button)
                     .into(),
             );
     }
 }
 
 #[derive(Component, Clone, PartialEq, Default)]
+pub struct MenuUi;
+
+#[derive(Component, Clone, PartialEq, Default)]
 pub struct MenuButtonProps {
     menu_button_type: MenuButtonType,
-    background_color: Color,
 }
 
 #[derive(Clone, PartialEq, Default)]
@@ -45,221 +52,93 @@ impl MenuButtonProps {
     }
 }
 
-impl Widget for MenuButtonProps {}
-
-#[derive(Bundle)]
-pub struct MenuButtonBundle {
-    pub props: MenuButtonProps,
-    pub styles: KStyle,
-    pub computed_styles: ComputedStyles,
-    pub children: KChildren,
-    // This allows us to hook into on click events!
-    pub on_event: OnEvent,
-    // Widget name is required by Kayak UI!
-    pub widget_name: WidgetName,
+fn setup_menu(mut commands: Commands, font_assets: Res<FontAssets>, colors: Res<UiColors>) {
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                position_type: PositionType::Absolute,
+                ..default()
+            },
+            ..default()
+        })
+        .insert(MenuUi)
+        .with_children(|parent| {
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        size: Size::new(Val::Percent(30.0), Val::Percent(50.0)),
+                        justify_content: JustifyContent::SpaceBetween,
+                        position_type: PositionType::Absolute,
+                        ..default()
+                    },
+                    background_color: Color::rgb(0.65, 0.65, 0.65).into(),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    parent
+                        .spawn(ButtonBundle {
+                            style: Style {
+                                size: Size::new(Val::Auto, Val::Auto),
+                                padding: UiRect::all(Val::Px(15.0)),
+                                margin: UiRect::all(Val::Auto),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..Default::default()
+                            },
+                            background_color: colors.button_standard.into(),
+                            ..Default::default()
+                        })
+                        .insert(MenuButtonProps {
+                            menu_button_type: MenuButtonType::NewGame,
+                        })
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle {
+                                text: Text {
+                                    sections: vec![TextSection {
+                                        value: "Play".to_string(),
+                                        style: TextStyle {
+                                            font: font_assets.fira_sans.clone(),
+                                            font_size: 40.0,
+                                            color: Color::rgb(0.9, 0.9, 0.9),
+                                        },
+                                    }],
+                                    alignment: Default::default(),
+                                },
+                                ..Default::default()
+                            });
+                        });
+                });
+        });
 }
 
-impl Default for MenuButtonBundle {
-    fn default() -> Self {
-        Self {
-            props: MenuButtonProps::default(),
-            styles: KStyle::default(),
-            computed_styles: ComputedStyles::default(),
-            children: KChildren::default(),
-            on_event: OnEvent::default(),
-            // Kayak uses this component to find out more information about your widget.
-            // This is done because bevy does not have the ability to query traits.
-            widget_name: MenuButtonProps::default().get_name(),
+fn click_play_button(
+    mut commands: Commands,
+    button_colors: Res<UiColors>,
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<Button>),
+    >,
+) {
+    for (interaction, mut color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Clicked => {
+                commands.insert_resource(NextState(GameState::Playing));
+            }
+            Interaction::Hovered => {
+                *color = button_colors.button_hovered.into();
+            }
+            Interaction::None => {
+                *color = button_colors.button_standard.into();
+            }
         }
     }
 }
 
-pub fn menu_button_render(
-    In((mut widget_context, entity)): In<(KayakWidgetContext, Entity)>,
-    mut commands: Commands,
-    colors: Res<UiColors>,
-    mut menu_button_query: Query<&mut MenuButtonProps>,
-    state_query: Query<&ButtonState>,
-) -> bool {
-
-    let state_entity =
-        widget_context.use_state(&mut commands, entity, ButtonState { hovering: false });
-    
-    let mut button_props = menu_button_query.get_mut(entity).unwrap();
-    let button_text = button_props.get_button_text();
-
-    let on_event = OnEvent::new(
-        move |In((event_dispatcher_context, _, mut event, _entity)): In<(
-            EventDispatcherContext,
-            WidgetState,
-            Event,
-            Entity,
-        )>,
-              mut query: Query<&mut ButtonState>,
-              mut menu_button_query: Query<&mut MenuButtonProps>,
-              mut commands: Commands,
-              mut exit_event: EventWriter<AppExit>,
-        | {
-            let button_props = menu_button_query.get_mut(entity).unwrap();
-
-            if let Ok(mut button) = query.get_mut(state_entity) {
-                match event.event_type {
-                    EventType::MouseIn(..) => {
-                        event.stop_propagation();
-                        button.hovering = true;
-                    }
-                    EventType::MouseOut(..) => {
-                        button.hovering = false;
-                    }
-                    EventType::Click(event) => {
-                        match button_props.menu_button_type {
-                            MenuButtonType::NewGame => {
-                                commands.insert_resource(NextState(GameState::Playing))
-                            }
-                            MenuButtonType::Options => {}
-                            MenuButtonType::Exit => {
-                                exit_event.send(AppExit);
-                            }
-                        };
-                        
-                    }
-                    _ => {}
-                }
-            }
-            (event_dispatcher_context, event)
-        },
-    );
-
-
-
-    if let Ok(button_state) = state_query.get(state_entity) {
-        
-        if button_state.hovering {
-            button_props.background_color = colors.button_hovered
-        } else {
-            button_props.background_color = colors.button_standard
-        };
-        
-        let button_style = KStyle {
-            // Lets use red for our button background!
-            background_color: StyleProp::Value(button_props.background_color),
-            // 50 pixel border radius.
-            border_radius: Corner::all(5.0).into(),
-            width: StyleProp::from(Units::Pixels(100.0)),
-            height: StyleProp::from(Units::Pixels(50.0)),
-            left: StyleProp::from(Units::Stretch(1.0)),
-            right: StyleProp::from(Units::Stretch(1.0)),
-            top: StyleProp::from(Units::Stretch(1.0)),
-            bottom: StyleProp::from(Units::Stretch(1.0)),
-            layout_type: StyleProp::from(LayoutType::Column),
-            ..Default::default()
-        };
-
-
-
-        let parent_id = Some(entity);
-
-        rsx! {
-            <BackgroundBundle
-                styles={button_style}
-                on_event={on_event}
-            >
-               <TextWidgetBundle
-                    styles={KStyle {
-                        top: Units::Stretch(1.0).into(),
-                        bottom: Units::Stretch(1.0).into(),
-                        ..Default::default()
-                    }}
-                    text={TextProps {
-                        content: button_text,
-                        alignment: Alignment::Middle,
-                        size: 20.0,
-                        ..Default::default()
-                    }}
-                />
-            </BackgroundBundle>
-        };
+fn cleanup_menu(mut commands: Commands, button: Query<Entity, With<MenuUi>>) {
+    for button in button.iter() {
+        commands.entity(button).despawn_recursive();
     }
-
-    // The boolean returned here tells kayak UI to update the tree. You can avoid tree updates by
-    // returning false, but in practice this should be done rarely. As kayak diff's the tree and
-    // will avoid tree updates if nothing has changed!
-    true
-}
-
-fn setup_menu(
-    mut commands: Commands,
-    font_assets: Res<FontAssets>,
-    colors: Res<UiColors>,
-    mut widget_context: Query<&mut KayakRootContext>,
-) {
-    let mut widget_context = widget_context.single_mut();
-
-    widget_context.add_widget_data::<MenuButtonProps, ButtonState>();
-    // Next we need to add the systems
-    widget_context.add_widget_system(
-        // We are registering these systems with a specific WidgetName.
-        MenuButtonProps::default().get_name(),
-        // widget_update auto diffs props and state.
-        // Optionally if you have context you can use: widget_update_with_context
-        // otherwise you will need to create your own widget update system!
-        widget_update::<MenuButtonProps, ButtonState>,
-        // Add our render system!
-        menu_button_render,
-    );
-    let parent_id = None;
-    let background_styles = KStyle {
-        background_color: StyleProp::Value(colors.background_standard),
-        border_radius: Corner::all(50.0).into(),
-        width: StyleProp::from(Units::Pixels(350.0)),
-        height: StyleProp::from(Units::Pixels(512.0)),
-        left: StyleProp::from(Units::Stretch(1.0)),
-        right: StyleProp::from(Units::Stretch(1.0)),
-        top: StyleProp::from(Units::Stretch(1.0)),
-        bottom: StyleProp::from(Units::Stretch(1.0)),
-        padding: Edge::new(
-            Units::Pixels(20.0),
-            Units::Pixels(20.0),
-            Units::Pixels(20.0),
-            Units::Pixels(20.0),
-        )
-        .into(),
-        ..KStyle::default()
-    };
-
-    // We can now create our widget like:
-    rsx! {
-        <KayakAppBundle>
-            <BackgroundBundle
-                styles={background_styles}
-            >
-                <MenuButtonBundle
-                    props={
-                        MenuButtonProps{
-                            menu_button_type: MenuButtonType::NewGame,
-                            background_color: colors.button_standard,
-                        }
-                    }
-                />
-                <MenuButtonBundle
-                    props={
-                        MenuButtonProps{
-                            menu_button_type: MenuButtonType::Options,
-                            background_color: colors.button_standard,
-
-                        }
-                    }
-                />
-                <MenuButtonBundle
-                    props={
-                        MenuButtonProps{
-                            menu_button_type: MenuButtonType::Exit,
-                            background_color: colors.button_standard,
-
-                        }
-                    }
-                />
-            </BackgroundBundle>
-        </KayakAppBundle>
-    };
 }
