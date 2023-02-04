@@ -34,6 +34,7 @@ bevy = { version = "0.9.1", default-features = false, features = [
 
 bevy_kira_audio = { version = "0.13" }
 bevy_asset_loader = { version = "0.14.1", features = ["stageless"] }
+bevy_tweening = "0.6"
 iyes_loopless = "0.9.1"
 bevy_mod_aseprite = "0.3"
 leafwing-input-manager = "0.7.1"

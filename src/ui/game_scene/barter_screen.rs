@@ -3,17 +3,15 @@
     BarterResolved, BarterTypes,
 };
 use crate::loading::FontAssets;
-use crate::ui::game_scene::scene_ui::GameStateButtons::Barter;
-use crate::ui::game_scene::scene_ui::{GameMainButtonProps, GameStateButtons, GameUi};
 use crate::ui::{UiColors, UiState};
 use crate::{GameState, PausedState};
 use bevy::app::AppExit;
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet, CurrentState, NextState};
-use std::ops::DerefMut;
-use std::process::id;
-use std::thread::spawn;
+
+use bevy_tweening::lens::UiPositionLens;
+use bevy_tweening::{Animator, EaseFunction, Tween};
 
 pub struct BarterUiPlugin;
 
@@ -25,8 +23,16 @@ impl Plugin for BarterUiPlugin {
             .add_exit_system(UiState::Barter, cleanup_barter_ui)
             .add_system_set(
                 ConditionSet::new()
+                    .label("spawn_cards")
                     .run_on_event::<BarterAttemptResultEvent>()
                     .with_system(spawn_barter_result)
+                    .into(),
+            )
+            .add_system_set(
+                ConditionSet::new()
+                    .after("spawn_cards")
+                    .run_on_event::<BarterAttemptResultEvent>()
+                    .with_system(animate_resolution_cards)
                     .into(),
             )
             .add_system_set(
@@ -65,6 +71,9 @@ impl BarterControlButtonProps {
 #[derive(Component, Default, PartialEq, Clone)]
 pub struct BarterUi;
 
+#[derive(Component, Default, PartialEq, Clone)]
+pub struct BarterResultCard;
+
 fn setup_barter_ui(mut commands: Commands, font_assets: Res<FontAssets>, colors: Res<UiColors>) {
     // root bundle
     commands
@@ -98,7 +107,7 @@ fn setup_barter_ui(mut commands: Commands, font_assets: Res<FontAssets>, colors:
                     setup_left_barter_screen(parent, &font_assets, &colors);
 
                     // center of barter screen
-                    setup_middle_barter_screen(parent, &font_assets, &colors);
+                    setup_middle_barter_screen(parent);
 
                     // right side of barter screen
                     setup_right_barter_screen(parent, &font_assets, &colors);
@@ -237,11 +246,7 @@ fn setup_left_barter_screen(
         .id()
 }
 
-fn setup_middle_barter_screen(
-    parent: &mut ChildBuilder,
-    font_assets: &Res<FontAssets>,
-    colors: &Res<UiColors>,
-) -> Entity {
+fn setup_middle_barter_screen(parent: &mut ChildBuilder) -> Entity {
     parent
         .spawn(NodeBundle {
             style: Style {
@@ -250,9 +255,10 @@ fn setup_middle_barter_screen(
                 position_type: PositionType::Relative,
                 flex_direction: FlexDirection::Column,
                 overflow: Overflow::Hidden,
+                flex_shrink: 0.0,
                 ..default()
             },
-            background_color: Color::rgb(0.0, 0.65, 0.65).into(),
+            background_color: Color::rgb(0.1, 0.1, 0.1).into(),
             ..default()
         })
         .insert(ResolutionUiParent)
@@ -378,7 +384,7 @@ fn setup_right_barter_screen(
                                 align_items: AlignItems::Center,
                                 ..Default::default()
                             },
-                            background_color: colors.button_standard.into(),
+                            background_color: colors.success.into(),
                             ..Default::default()
                         })
                         .insert(BarterControlButtonProps {
@@ -410,7 +416,7 @@ fn setup_right_barter_screen(
                                 align_items: AlignItems::Center,
                                 ..Default::default()
                             },
-                            background_color: colors.button_standard.into(),
+                            background_color: colors.failure.into(),
                             ..Default::default()
                         })
                         .insert(BarterControlButtonProps {
@@ -445,34 +451,119 @@ fn spawn_barter_result(
     mut result: EventReader<BarterAttemptResultEvent>,
     font_assets: Res<FontAssets>,
     colors: Res<UiColors>,
+    mut query: Query<(Entity, &mut Style), With<BarterResultCard>>,
 ) {
     let parent = parent.single();
 
-    commands.entity(parent).with_children(|parent| {
-        for event in result.iter() {
-            match event.result {
-                BarterAttemptResult::Success => {
-                    // spawn in two parts so that its split up and we have a border
+    for event in result.iter() {
+        for (entity, mut style) in query.iter_mut() {
+            let tween = Tween::new(
+                EaseFunction::QuadraticIn,
+                std::time::Duration::from_secs_f32(0.3),
+                UiPositionLens {
+                    start: UiRect {
+                        left: Val::Auto,
+                        top: Val::Auto,
+                        right: Val::Auto,
+                        bottom: Val::Px(-170.0),
+                    },
+                    end: UiRect {
+                        left: Val::Auto,
+                        top: Val::Auto,
+                        right: Val::Auto,
+                        bottom: Val::Px(0.0),
+                    },
+                },
+            );
+
+            style.position = UiRect {
+                left: Val::Auto,
+                top: Val::Auto,
+                right: Val::Auto,
+                bottom: Val::Px(-170.0),
+            };
+
+            commands.entity(entity).insert(Animator::new(tween));
+        }
+
+        commands.entity(parent).with_children(|parent| {
+            let attempt_type_text = event.attempt_type.get_string_name_from_instance();
+            let price_text = event.new_price;
+            let mut color = colors.success;
+            let mut result_text = String::from("Success");
+            let mut justify_content_type: JustifyContent = JustifyContent::FlexStart;
+
+            if let BarterAttemptResult::Failure = event.result {
+                color = colors.failure;
+                result_text = String::from("Failure");
+                justify_content_type = JustifyContent::FlexEnd;
+            }
+
+            let tween = Tween::new(
+                EaseFunction::QuadraticIn,
+                std::time::Duration::from_secs_f32(0.3),
+                UiPositionLens {
+                    start: UiRect {
+                        left: Val::Auto,
+                        top: Val::Auto,
+                        right: Val::Auto,
+                        bottom: Val::Px(-170.0),
+                    },
+                    end: UiRect {
+                        left: Val::Auto,
+                        top: Val::Auto,
+                        right: Val::Auto,
+                        bottom: Val::Px(0.0),
+                    },
+                },
+            );
+
+            // spawn in two parts so that its split up and we have a border
+            parent
+                // main holder node
+                .spawn(NodeBundle {
+                    style: Style {
+                        size: Size::new(Val::Auto, Val::Px(130.0)),
+                        margin: UiRect::all(Val::Px(20.0)),
+                        justify_content: justify_content_type,
+                        align_items: AlignItems::Center,
+                        position_type: PositionType::Relative,
+                        flex_shrink: 0.0,
+                        position: UiRect {
+                            left: Val::Auto,
+                            top: Val::Auto,
+                            right: Val::Auto,
+                            bottom: Val::Px(-170.0),
+                        },
+                        ..default()
+                    },
+                    ..default()
+                })
+                .insert(BarterResultCard)
+                .insert(Animator::new(tween))
+                .with_children(|parent| {
                     parent
-                        // main holder node
+                        // big holder that is used as our border
                         .spawn(NodeBundle {
                             style: Style {
-                                size: Size::new(Val::Percent(100.0), Val::Auto),
-                                margin: UiRect::all(Val::Px(20.0)),
-                                justify_content: JustifyContent::FlexStart,
+                                size: Size::new(Val::Percent(65.0), Val::Percent(100.0)),
+                                justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 position_type: PositionType::Relative,
                                 ..default()
                             },
+                            background_color: color.into(),
                             ..default()
                         })
                         .with_children(|parent| {
+                            // actual interior that we want to use
                             parent
-                                // big holder that is hidden for background border
                                 .spawn(NodeBundle {
                                     style: Style {
-                                        size: Size::new(Val::Percent(65.0), Val::Percent(100.0)),
-                                        justify_content: JustifyContent::SpaceBetween,
+                                        size: Size::new(Val::Percent(95.0), Val::Percent(80.0)),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        flex_direction: FlexDirection::Column,
                                         position_type: PositionType::Relative,
                                         ..default()
                                     },
@@ -480,13 +571,53 @@ fn spawn_barter_result(
                                     ..default()
                                 })
                                 .with_children(|parent| {
-                                    // actual interior that we want to use
+                                    // Result text
                                     parent
                                         .spawn(NodeBundle {
                                             style: Style {
-                                                size: Size::new(Val::Percent(95.0), Val::Percent(95.0)),
-                                                justify_content: JustifyContent::SpaceBetween,
-                                                flex_direction: FlexDirection::Column,
+                                                size: Size::new(Val::Percent(100.0), Val::Auto),
+                                                padding: UiRect {
+                                                    left: Val::Px(20.0),
+                                                    right: Val::Px(20.0),
+                                                    top: Val::Px(10.0),
+                                                    bottom: Val::Px(20.0),
+                                                },
+                                                justify_content: JustifyContent::FlexStart,
+                                                align_items: AlignItems::Center,
+                                                position_type: PositionType::Relative,
+                                                ..default()
+                                            },
+                                            background_color: color.into(),
+                                            ..default()
+                                        })
+                                        .with_children(|parent| {
+                                            parent.spawn(TextBundle {
+                                                text: Text {
+                                                    sections: vec![TextSection {
+                                                        value: String::from(format!(
+                                                            "{} {}!",
+                                                            attempt_type_text, result_text
+                                                        )),
+                                                        style: TextStyle {
+                                                            font: font_assets.fira_sans.clone(),
+                                                            font_size: 40.0,
+                                                            color: Color::rgb(1.0, 1.0, 1.0),
+                                                        },
+                                                    }],
+                                                    alignment: Default::default(),
+                                                },
+                                                ..Default::default()
+                                            });
+                                        });
+
+                                    // amount
+                                    parent
+                                        .spawn(NodeBundle {
+                                            style: Style {
+                                                size: Size::new(Val::Percent(100.0), Val::Auto),
+                                                padding: UiRect::all(Val::Px(20.0)),
+                                                align_items: AlignItems::Center,
+                                                justify_content: JustifyContent::FlexStart,
                                                 position_type: PositionType::Relative,
                                                 ..default()
                                             },
@@ -494,80 +625,32 @@ fn spawn_barter_result(
                                             ..default()
                                         })
                                         .with_children(|parent| {
-                                            // Result text
-                                            parent
-                                                .spawn(NodeBundle {
-                                                    style: Style {
-                                                        size: Size::new(Val::Percent(100.0), Val::Auto),
-                                                        justify_content: JustifyContent::FlexStart,
-                                                        position_type: PositionType::Relative,
-                                                        ..default()
-                                                    },
-                                                    background_color: colors.success.into(),
-                                                    ..default()
-                                                })
-                                                .with_children(|parent| {
-                                                    parent.spawn(TextBundle {
-                                                        text: Text {
-                                                            sections: vec![TextSection {
-                                                                value: String::from(format!(
-                                                                    "{} Success!",
-                                                                    event
-                                                                        .attempt_type
-                                                                        .get_string_name_from_instance()
-                                                                )),
-                                                                style: TextStyle {
-                                                                    font: font_assets.fira_sans.clone(),
-                                                                    font_size: 40.0,
-                                                                    color: Color::rgb(1.0, 1.0, 1.0),
-                                                                },
-                                                            }],
-                                                            alignment: Default::default(),
+                                            parent.spawn(TextBundle {
+                                                text: Text {
+                                                    sections: vec![TextSection {
+                                                        value: String::from(format!(
+                                                            "New Price: {} gold",
+                                                            price_text
+                                                        )),
+                                                        style: TextStyle {
+                                                            font: font_assets.fira_sans.clone(),
+                                                            font_size: 40.0,
+                                                            color: Color::rgb(0.0, 0.0, 0.0),
                                                         },
-                                                        ..Default::default()
-                                                    });
-                                                });
-
-                                            // amount
-                                            parent
-                                                .spawn(NodeBundle {
-                                                    style: Style {
-                                                        size: Size::new(Val::Percent(100.0), Val::Auto),
-                                                        justify_content: JustifyContent::FlexStart,
-                                                        position_type: PositionType::Relative,
-                                                        ..default()
-                                                    },
-                                                    background_color: Color::rgb(1.0, 1.0, 1.0).into(),
-                                                    ..default()
-                                                })
-                                                .with_children(|parent| {
-                                                    parent.spawn(TextBundle {
-                                                        text: Text {
-                                                            sections: vec![TextSection {
-                                                                value: String::from(format!(
-                                                                    "New Price: {} gold",
-                                                                    event.new_price
-                                                                )),
-                                                                style: TextStyle {
-                                                                    font: font_assets.fira_sans.clone(),
-                                                                    font_size: 40.0,
-                                                                    color: Color::rgb(0.0, 0.0, 0.0),
-                                                                },
-                                                            }],
-                                                            alignment: Default::default(),
-                                                        },
-                                                        ..Default::default()
-                                                    });
-                                                });
+                                                    }],
+                                                    alignment: Default::default(),
+                                                },
+                                                ..Default::default()
+                                            });
                                         });
                                 });
                         });
-                }
-                BarterAttemptResult::Failure => {}
-            }
-        }
-    });
+                });
+        });
+    }
 }
+
+fn animate_resolution_cards(mut commands: Commands) {}
 
 fn click_barter_control_button(
     mut commands: Commands,
@@ -584,11 +667,27 @@ fn click_barter_control_button(
     for (interaction, mut color, props) in &mut interaction_query {
         match *interaction {
             Interaction::Hovered => {
-                *color = button_colors.button_hovered.into();
-            }
+                match props.control_button_type {
+                    BarterResolutionTypes::Approve { .. } => {
+                        *color = button_colors.success_hovered.into();
+
+                    }
+                    BarterResolutionTypes::Deny => {
+                        *color = button_colors.failure_hovered.into();
+
+                    }
+                }                 }
             Interaction::None => {
-                *color = button_colors.button_standard.into();
-            }
+                match props.control_button_type {
+                    BarterResolutionTypes::Approve { .. } => {
+                        *color = button_colors.success.into();
+
+                    }
+                    BarterResolutionTypes::Deny => {
+                        *color = button_colors.failure.into();
+
+                    }
+                }            }
             _ => {}
         }
         match props.control_button_type {

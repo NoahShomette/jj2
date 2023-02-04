@@ -49,7 +49,10 @@ pub struct UiColors {
     button_hovered: Color,
     
     success: Color,
+    success_hovered: Color,
+    
     failure: Color,
+    failure_hovered: Color,
 }
 
 impl Default for UiColors {
@@ -75,10 +78,20 @@ impl Default for UiColors {
                 (163 - 0) as f32 / (255 - 0) as f32,
                 (112 - 0) as f32 / (255 - 0) as f32,
             ),
+            success_hovered:  Color::rgb(
+                (62 - 0) as f32 / (255 - 0) as f32,
+                (137 - 0) as f32 / (255 - 0) as f32,
+                (72 - 0) as f32 / (255 - 0) as f32,
+            ),
             failure:  Color::rgb(
                 (186 - 0) as f32 / (255 - 0) as f32,
                 (59 - 0) as f32 / (255 - 0) as f32,
                 (70 - 0) as f32 / (255 - 0) as f32,
+            ),
+            failure_hovered:  Color::rgb(
+                (162 - 0) as f32 / (255 - 0) as f32,
+                (38 - 0) as f32 / (255 - 0) as f32,
+                (51 - 0) as f32 / (255 - 0) as f32,
             ),
         }
     }
