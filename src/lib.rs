@@ -1,7 +1,10 @@
+extern crate core;
+
 mod audio;
 mod barter;
 mod loading;
 mod player;
+mod scene;
 mod ui;
 
 use crate::audio::InternalAudioPlugin;
@@ -14,7 +17,9 @@ use bevy::app::App;
 #[cfg(debug_assertions)]
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
+use bevy::window::close_on_esc;
 use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet, NextState};
+use crate::scene::ScenePlugin;
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 enum PausedState {
@@ -47,7 +52,8 @@ impl Plugin for GamePlugin {
             .add_plugin(UiPlugin)
             .add_plugin(InternalAudioPlugin)
             .add_plugin(PlayerPlugin)
-            .add_plugin(BarterPlugin);
+            .add_plugin(BarterPlugin)
+            .add_plugin(ScenePlugin);
 
         app.add_loopless_state(PausedState::Playing);
 
@@ -61,7 +67,8 @@ impl Plugin for GamePlugin {
         #[cfg(debug_assertions)]
         {
             app.add_plugin(FrameTimeDiagnosticsPlugin::default())
-                .add_plugin(LogDiagnosticsPlugin::default());
+                .add_plugin(LogDiagnosticsPlugin::default())
+                .add_system(close_on_esc);
         }
     }
 }

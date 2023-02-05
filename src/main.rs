@@ -7,6 +7,8 @@ use bevy::winit::WinitWindows;
 use bevy::DefaultPlugins;
 use seldom_state::StateMachinePlugin;
 use std::io::Cursor;
+use bevy_mod_aseprite::AsepritePlugin;
+use bevy_tiled_camera::TiledCameraPlugin;
 use bevy_tweening::TweeningPlugin;
 use vampire_shopire::GamePlugin;
 use winit::window::Icon;
@@ -29,6 +31,8 @@ fn main() {
                 })
                 .set(ImagePlugin::default_nearest()),
         )
+        .add_plugin(AsepritePlugin)
+        .add_plugin(TiledCameraPlugin)
         .add_plugin(TweeningPlugin)
         .add_plugin(StateMachinePlugin)
         .add_plugin(GamePlugin)

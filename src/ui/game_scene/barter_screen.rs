@@ -1,17 +1,15 @@
 ﻿use crate::barter::{
-    BarterAttemptEvent, BarterAttemptResult, BarterAttemptResultEvent, BarterResolutionTypes,
-    BarterResolved, BarterTypes,
+    BarterAttemptResult, BarterAttemptResultEvent, BarterResolutionTypes,
+    BarterTypes,
 };
 use crate::loading::FontAssets;
 use crate::ui::{UiColors, UiState};
-use crate::{GameState, PausedState};
-use bevy::app::AppExit;
-use bevy::ecs::system::EntityCommands;
+use crate::{PausedState};
 use bevy::prelude::*;
-use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet, CurrentState, NextState};
+use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet, NextState};
 
 use bevy_tweening::lens::UiPositionLens;
-use bevy_tweening::{Animator, EaseFunction, Tween};
+use bevy_tweening::{Animator, EaseFunction, Tween, TweenCompleted};
 
 pub struct BarterUiPlugin;
 
@@ -19,7 +17,8 @@ pub struct BarterUiPlugin;
 /// The menu is only drawn during the State `GameState::Menu` and is removed when that state is exited
 impl Plugin for BarterUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_enter_system(UiState::Barter, setup_barter_ui)
+        app.add_event::<CloseBarterUi>()
+            .add_enter_system(UiState::Barter, setup_barter_ui)
             .add_exit_system(UiState::Barter, cleanup_barter_ui)
             .add_system_set(
                 ConditionSet::new()
@@ -30,24 +29,25 @@ impl Plugin for BarterUiPlugin {
             )
             .add_system_set(
                 ConditionSet::new()
-                    .after("spawn_cards")
-                    .run_on_event::<BarterAttemptResultEvent>()
-                    .with_system(animate_resolution_cards)
-                    .into(),
-            )
-            .add_system_set(
-                ConditionSet::new()
                     .run_in_state(UiState::Barter)
                     .run_in_state(PausedState::Playing)
                     .with_system(click_barter_control_button)
                     .with_system(click_barter_button)
+                    .with_system(tween_out_barter_ui)
+                    .with_system(cleanup_barter_ui)
                     .into(),
             );
     }
 }
 
+const BARTER_UI_TRANSITION_DONE: u64 = 1;
+const BARTER_RESOLUTION_CARD_TRANSITION_DONE: u64 = 2;
+
 #[derive(Component, Clone, PartialEq, Default)]
 pub struct ResolutionUiParent;
+
+#[derive(Clone, PartialEq, Default)]
+pub struct CloseBarterUi;
 
 #[derive(Component, Clone, PartialEq)]
 pub struct BarterButtonProps {
@@ -74,7 +74,32 @@ pub struct BarterUi;
 #[derive(Component, Default, PartialEq, Clone)]
 pub struct BarterResultCard;
 
-fn setup_barter_ui(mut commands: Commands, font_assets: Res<FontAssets>, colors: Res<UiColors>) {
+fn setup_barter_ui(
+    mut commands: Commands,
+    font_assets: Res<FontAssets>,
+    colors: Res<UiColors>,
+    mut windows: ResMut<Windows>,
+) {
+    let window = windows.primary();
+    let tween = Tween::new(
+        EaseFunction::QuadraticIn,
+        std::time::Duration::from_secs_f32(0.7),
+        UiPositionLens {
+            start: UiRect {
+                left: Val::Auto,
+                top: Val::Auto,
+                right: Val::Auto,
+                bottom: Val::Px(-window.height()),
+            },
+            end: UiRect {
+                left: Val::Auto,
+                top: Val::Auto,
+                right: Val::Auto,
+                bottom: Val::Px(0.0),
+            },
+        },
+    );
+
     // root bundle
     commands
         .spawn(NodeBundle {
@@ -87,6 +112,7 @@ fn setup_barter_ui(mut commands: Commands, font_assets: Res<FontAssets>, colors:
             },
             ..default()
         })
+        .insert(Animator::new(tween))
         .insert(BarterUi)
         .with_children(|parent| {
             // main background and holder for barter ui
@@ -650,8 +676,6 @@ fn spawn_barter_result(
     }
 }
 
-fn animate_resolution_cards(mut commands: Commands) {}
-
 fn click_barter_control_button(
     mut commands: Commands,
     button_colors: Res<UiColors>,
@@ -663,42 +687,37 @@ fn click_barter_control_button(
         ),
         (Changed<Interaction>, With<Button>),
     >,
+    mut close_ui: EventWriter<CloseBarterUi>,
 ) {
     for (interaction, mut color, props) in &mut interaction_query {
         match *interaction {
-            Interaction::Hovered => {
-                match props.control_button_type {
-                    BarterResolutionTypes::Approve { .. } => {
-                        *color = button_colors.success_hovered.into();
-
-                    }
-                    BarterResolutionTypes::Deny => {
-                        *color = button_colors.failure_hovered.into();
-
-                    }
-                }                 }
-            Interaction::None => {
-                match props.control_button_type {
-                    BarterResolutionTypes::Approve { .. } => {
-                        *color = button_colors.success.into();
-
-                    }
-                    BarterResolutionTypes::Deny => {
-                        *color = button_colors.failure.into();
-
-                    }
-                }            }
+            Interaction::Hovered => match props.control_button_type {
+                BarterResolutionTypes::Approve { .. } => {
+                    *color = button_colors.success_hovered.into();
+                }
+                BarterResolutionTypes::Deny => {
+                    *color = button_colors.failure_hovered.into();
+                }
+            },
+            Interaction::None => match props.control_button_type {
+                BarterResolutionTypes::Approve { .. } => {
+                    *color = button_colors.success.into();
+                }
+                BarterResolutionTypes::Deny => {
+                    *color = button_colors.failure.into();
+                }
+            },
             _ => {}
         }
         match props.control_button_type {
             BarterResolutionTypes::Approve { .. } => {
                 if let Interaction::Clicked = interaction {
-                    commands.insert_resource(NextState(UiState::Normal));
+                    close_ui.send_default();
                 }
             }
             BarterResolutionTypes::Deny => {
                 if let Interaction::Clicked = interaction {
-                    commands.insert_resource(NextState(UiState::Normal));
+                    close_ui.send_default();
                 }
             }
         }
@@ -756,8 +775,51 @@ fn click_barter_button(
     }
 }
 
-fn cleanup_barter_ui(mut commands: Commands, button: Query<Entity, With<BarterUi>>) {
-    for button in button.iter() {
-        commands.entity(button).despawn_recursive();
+fn tween_out_barter_ui(
+    mut commands: Commands,
+    button: Query<Entity, With<BarterUi>>,
+    mut close_ui: EventReader<CloseBarterUi>,
+    mut windows: ResMut<Windows>,
+) {
+    let window = windows.primary();
+
+    for event in close_ui.iter() {
+        for button in button.iter() {
+            let tween = Tween::new(
+                EaseFunction::QuadraticIn,
+                std::time::Duration::from_secs_f32(0.7),
+                UiPositionLens {
+                    start: UiRect {
+                        left: Val::Auto,
+                        top: Val::Auto,
+                        right: Val::Auto,
+                        bottom: Val::Px(0.0),
+                    },
+                    end: UiRect {
+                        left: Val::Auto,
+                        top: Val::Auto,
+                        right: Val::Auto,
+                        bottom: Val::Px(-window.height()),
+                    },
+                },
+            )
+            .with_completed_event(BARTER_UI_TRANSITION_DONE);
+            commands.entity(button).insert(Animator::new(tween));
+        }
+    }
+}
+
+fn cleanup_barter_ui(
+    mut commands: Commands,
+    button: Query<Entity, With<BarterUi>>,
+    mut reader: EventReader<TweenCompleted>,
+) {
+    for event in reader.iter() {
+        if event.user_data == BARTER_UI_TRANSITION_DONE {
+            for button in button.iter() {
+                commands.entity(button).despawn_recursive();
+                commands.insert_resource(NextState(UiState::Normal));
+            }
+        }
     }
 }

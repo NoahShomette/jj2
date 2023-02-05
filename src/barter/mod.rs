@@ -1,4 +1,4 @@
-﻿use crate::barter::customers::CustomerHandler;
+﻿use crate::barter::customers::{CustomerHandler, CustomerPlugin};
 use crate::ui::game_scene::barter_screen::BarterButtonProps;
 use bevy::prelude::{App, Plugin};
 
@@ -12,6 +12,8 @@ impl Plugin for BarterPlugin {
             .add_event::<BarterResolved>()
             .add_event::<BarterAttemptEvent>()
             .add_event::<BarterAttemptResultEvent>();
+
+        app.add_plugin(CustomerPlugin);
     }
 }
 
