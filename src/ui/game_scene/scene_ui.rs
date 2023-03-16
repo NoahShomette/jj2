@@ -6,6 +6,7 @@ use crate::{GameState, PausedState};
 use bevy::prelude::*;
 use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet};
 use iyes_loopless::state::NextState;
+use crate::barter::BarterState;
 
 pub struct GameSceneUiPlugin;
 
@@ -175,7 +176,7 @@ fn handle_game_buttons(
             GameStateButtons::Barter => {
                 if let Interaction::Clicked = interaction {
                     if let Some(customer) = customer_handler.get_next_customer() {
-                        commands.insert_resource(NextState(UiState::Barter));
+                        commands.insert_resource(NextState(BarterState::Bartering));
                         commands.entity(customer).insert(IsActiveCustomer);
                     }
                 }

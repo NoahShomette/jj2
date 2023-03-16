@@ -1,4 +1,4 @@
-﻿use crate::barter::{HaggleResult, HaggleResultEvent, BarterResolutionTypes, HaggleType, HaggleAttemptEvent};
+﻿use crate::barter::{HaggleResult, HaggleResultEvent, BarterResolutionTypes, HaggleType, HaggleAttemptEvent, BarterState, Barter};
 use crate::loading::FontAssets;
 use crate::ui::{UiColors, UiState};
 use crate::PausedState;
@@ -8,6 +8,7 @@ use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet, NextState};
 use crate::barter::customers::{CustomerHandler, CustomerState};
 use bevy_tweening::lens::UiPositionLens;
 use bevy_tweening::{Animator, EaseFunction, Tween, TweenCompleted};
+use crate::player::Gold;
 
 pub struct BarterUiPlugin;
 
@@ -686,7 +687,8 @@ fn click_barter_control_button(
         (Changed<Interaction>, With<Button>),
     >,
     mut close_ui: EventWriter<CloseBarterUi>,
-    mut customer_handler: ResMut<CustomerHandler>,
+    mut gold: ResMut<Gold>,
+    mut barter: ResMut<Barter>
 ) {
     for (interaction, mut color, props) in &mut interaction_query {
         match *interaction {
@@ -711,28 +713,13 @@ fn click_barter_control_button(
         match props.control_button_type {
             BarterResolutionTypes::Approve { .. } => {
                 if let Interaction::Clicked = interaction {
+                    gold.amount = gold.amount.saturating_add(barter.get_price());
                     close_ui.send_default();
-                    commands
-                        .entity(
-                            customer_handler
-                                .get_next_customer()
-                                .expect("If we are in barter we should always have a customer"),
-                        )
-                        .insert(CustomerState::Despawning);
-                    customer_handler.remove_customer_at_index(0);
                 }
             }
             BarterResolutionTypes::Deny => {
                 if let Interaction::Clicked = interaction {
                     close_ui.send_default();
-                    commands
-                        .entity(
-                            customer_handler
-                                .get_next_customer()
-                                .expect("If we are in barter we should always have a customer"),
-                        )
-                        .insert(CustomerState::Despawning);
-                    customer_handler.remove_customer_at_index(0);
                 }
             }
         }
@@ -827,7 +814,7 @@ fn cleanup_barter_ui(
         if event.user_data == BARTER_UI_TRANSITION_DONE {
             for button in button.iter() {
                 commands.entity(button).despawn_recursive();
-                commands.insert_resource(NextState(UiState::Normal));
+                commands.insert_resource(NextState(BarterState::NotBartering));
             }
         }
     }
