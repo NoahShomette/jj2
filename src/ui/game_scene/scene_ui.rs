@@ -19,7 +19,7 @@ impl Plugin for GameSceneUiPlugin {
                 ConditionSet::new()
                     .run_in_state(GameState::Playing)
                     .run_in_state(PausedState::Playing)
-                    .with_system(click_play_button)
+                    .with_system(handle_game_buttons)
                     .with_system(update_gold_count)
                     .into(),
             );
@@ -152,7 +152,7 @@ fn update_gold_count(mut gold_amount_query: Query<&mut Text, With<GoldAmount>>, 
     }
 }
 
-fn click_play_button(
+fn handle_game_buttons(
     mut commands: Commands,
     button_colors: Res<UiColors>,
     mut interaction_query: Query<

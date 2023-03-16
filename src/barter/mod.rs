@@ -3,7 +3,10 @@
 //! A Haggle is an individual attempt to adjust the price
 
 use crate::barter::customers::{CustomerHandler, CustomerPlugin};
+use crate::ui::UiState;
+use crate::PausedState;
 use bevy::prelude::{App, Plugin};
+use iyes_loopless::prelude::ConditionSet;
 
 pub mod customers;
 
@@ -12,13 +15,38 @@ pub struct BarterPlugin;
 impl Plugin for BarterPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CustomerHandler::default())
+            .add_event::<BeginBarter>()
+            .add_event::<EndBarter>()
             .add_event::<BarterResolved>()
             .add_event::<HaggleAttemptEvent>()
             .add_event::<HaggleResultEvent>();
 
         app.add_plugin(CustomerPlugin);
+
+        app.add_system_set(
+            ConditionSet::new()
+                .run_in_state(PausedState::Playing)
+                .with_system(handle_bartering)
+                .into(),
+        )
+        .add_system_set(
+            ConditionSet::new()
+                .label("handle_haggle_attempt_events")
+                .run_on_event::<HaggleAttemptEvent>()
+                .with_system(handle_haggle_attempt_events)
+                .into(),
+        );
     }
 }
+
+pub enum BarterState{
+    Bartering,
+    NotBartering
+}
+
+pub struct BeginBarter;
+
+pub struct EndBarter;
 
 pub struct Barter {
     sell_price: u32,
@@ -26,11 +54,12 @@ pub struct Barter {
 }
 
 impl Barter {
-    pub fn log_result(&mut self, haggle_result: HaggleResultEvent){
-        
+    pub fn log_result(&mut self, haggle_result: HaggleResultEvent) {
+        self.update_price(haggle_result.new_price);
+        self.haggles.push(haggle_result);
     }
     pub fn update_price(&mut self, price: u32) {
-        self.sell_price += price;
+        self.sell_price = price;
     }
 }
 
@@ -93,3 +122,12 @@ pub enum BarterResolutionTypes {
     #[default]
     Deny,
 }
+
+fn handle_bartering() {}
+
+fn handle_haggle_attempt_events() {}
+
+fn begin_barter() {}
+
+fn end_barter() {}
+

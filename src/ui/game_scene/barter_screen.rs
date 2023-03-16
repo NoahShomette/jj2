@@ -1,6 +1,4 @@
-﻿use crate::barter::{
-    HaggleResult, HaggleResultEvent, BarterResolutionTypes, HaggleType,
-};
+﻿use crate::barter::{HaggleResult, HaggleResultEvent, BarterResolutionTypes, HaggleType, HaggleAttemptEvent};
 use crate::loading::FontAssets;
 use crate::ui::{UiColors, UiState};
 use crate::PausedState;
@@ -744,7 +742,7 @@ fn click_barter_control_button(
 fn click_barter_button(
     mut commands: Commands,
     button_colors: Res<UiColors>,
-    mut barter_attempt: EventWriter<HaggleResultEvent>,
+    mut barter_attempt: EventWriter<HaggleAttemptEvent>,
     mut interaction_query: Query<
         (&Interaction, &mut BackgroundColor, &BarterButtonProps),
         (Changed<Interaction>, With<Button>),
@@ -763,28 +761,22 @@ fn click_barter_button(
         match props.barter_button_type {
             HaggleType::Bully => {
                 if let Interaction::Clicked = interaction {
-                    barter_attempt.send(HaggleResultEvent {
-                        result: HaggleResult::Success,
+                    barter_attempt.send(HaggleAttemptEvent {
                         attempt_type: HaggleType::Bully,
-                        new_price: 50,
                     })
                 }
             }
             HaggleType::Persuade => {
                 if let Interaction::Clicked = interaction {
-                    barter_attempt.send(HaggleResultEvent {
-                        result: HaggleResult::Success,
+                    barter_attempt.send(HaggleAttemptEvent {
                         attempt_type: HaggleType::Persuade,
-                        new_price: 50,
                     })
                 }
             }
             HaggleType::Plea => {
                 if let Interaction::Clicked = interaction {
-                    barter_attempt.send(HaggleResultEvent {
-                        result: HaggleResult::Failure,
+                    barter_attempt.send(HaggleAttemptEvent {
                         attempt_type: HaggleType::Plea,
-                        new_price: 40,
                     })
                 }
             }
