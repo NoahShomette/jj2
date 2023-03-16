@@ -1,12 +1,9 @@
-﻿use crate::barter::customers::{
-    Customer, CustomerBundle, CustomerDifficulty, MaxPurchaseAmount, Orientation,
-};
-use crate::loading::{AsepriteHandles, CustomerAsepriteHandles, TextureAssets};
+﻿
+use crate::loading::{AsepriteHandles};
 use crate::GameState;
 use bevy::prelude::{default, Assets, Commands, Res, ResMut, TextureAtlasSprite, Transform, Vec3, Plugin, App};
 use bevy_mod_aseprite::{Aseprite, AsepriteAnimation, AsepriteBundle};
 use iyes_loopless::prelude::AppLooplessStateExt;
-use rand::{thread_rng, Rng};
 
 pub struct ScenePlugin;
 
@@ -26,6 +23,7 @@ pub fn setup_background_scene(
 ) {
     let aseprite_handle = &aseprite_handles[0];
     let sprite = aseprites.get(aseprite_handle).unwrap();
+    
     let animation = AsepriteAnimation::new(sprite.info(), "Loop");
 
     commands.spawn(

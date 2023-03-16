@@ -1,13 +1,13 @@
 ﻿use crate::barter::{
-    BarterAttemptResult, BarterAttemptResultEvent, BarterResolutionTypes,
-    BarterTypes,
+    HaggleResult, HaggleResultEvent, BarterResolutionTypes, HaggleType,
 };
 use crate::loading::FontAssets;
 use crate::ui::{UiColors, UiState};
-use crate::{PausedState};
+use crate::PausedState;
 use bevy::prelude::*;
 use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet, NextState};
 
+use crate::barter::customers::{CustomerHandler, CustomerState};
 use bevy_tweening::lens::UiPositionLens;
 use bevy_tweening::{Animator, EaseFunction, Tween, TweenCompleted};
 
@@ -23,7 +23,7 @@ impl Plugin for BarterUiPlugin {
             .add_system_set(
                 ConditionSet::new()
                     .label("spawn_cards")
-                    .run_on_event::<BarterAttemptResultEvent>()
+                    .run_on_event::<HaggleResultEvent>()
                     .with_system(spawn_barter_result)
                     .into(),
             )
@@ -51,7 +51,7 @@ pub struct CloseBarterUi;
 
 #[derive(Component, Clone, PartialEq)]
 pub struct BarterButtonProps {
-    barter_button_type: BarterTypes,
+    barter_button_type: HaggleType,
 }
 
 #[derive(Component, Clone, PartialEq, Default)]
@@ -185,13 +185,13 @@ fn setup_left_barter_screen(
                             ..Default::default()
                         })
                         .insert(BarterButtonProps {
-                            barter_button_type: BarterTypes::Bully,
+                            barter_button_type: HaggleType::Bully,
                         })
                         .with_children(|parent| {
                             parent.spawn(TextBundle {
                                 text: Text {
                                     sections: vec![TextSection {
-                                        value: BarterTypes::get_string_name(BarterTypes::Bully),
+                                        value: HaggleType::get_string_name(HaggleType::Bully),
                                         style: TextStyle {
                                             font: font_assets.fira_sans.clone(),
                                             font_size: 40.0,
@@ -217,13 +217,13 @@ fn setup_left_barter_screen(
                             ..Default::default()
                         })
                         .insert(BarterButtonProps {
-                            barter_button_type: BarterTypes::Plea,
+                            barter_button_type: HaggleType::Plea,
                         })
                         .with_children(|parent| {
                             parent.spawn(TextBundle {
                                 text: Text {
                                     sections: vec![TextSection {
-                                        value: BarterTypes::get_string_name(BarterTypes::Plea),
+                                        value: HaggleType::get_string_name(HaggleType::Plea),
                                         style: TextStyle {
                                             font: font_assets.fira_sans.clone(),
                                             font_size: 40.0,
@@ -249,13 +249,13 @@ fn setup_left_barter_screen(
                             ..Default::default()
                         })
                         .insert(BarterButtonProps {
-                            barter_button_type: BarterTypes::Persuade,
+                            barter_button_type: HaggleType::Persuade,
                         })
                         .with_children(|parent| {
                             parent.spawn(TextBundle {
                                 text: Text {
                                     sections: vec![TextSection {
-                                        value: BarterTypes::get_string_name(BarterTypes::Persuade),
+                                        value: HaggleType::get_string_name(HaggleType::Persuade),
                                         style: TextStyle {
                                             font: font_assets.fira_sans.clone(),
                                             font_size: 40.0,
@@ -474,7 +474,7 @@ fn setup_right_barter_screen(
 fn spawn_barter_result(
     parent: Query<Entity, With<ResolutionUiParent>>,
     mut commands: Commands,
-    mut result: EventReader<BarterAttemptResultEvent>,
+    mut result: EventReader<HaggleResultEvent>,
     font_assets: Res<FontAssets>,
     colors: Res<UiColors>,
     mut query: Query<(Entity, &mut Style), With<BarterResultCard>>,
@@ -519,7 +519,7 @@ fn spawn_barter_result(
             let mut result_text = String::from("Success");
             let mut justify_content_type: JustifyContent = JustifyContent::FlexStart;
 
-            if let BarterAttemptResult::Failure = event.result {
+            if let HaggleResult::Failure = event.result {
                 color = colors.failure;
                 result_text = String::from("Failure");
                 justify_content_type = JustifyContent::FlexEnd;
@@ -688,6 +688,7 @@ fn click_barter_control_button(
         (Changed<Interaction>, With<Button>),
     >,
     mut close_ui: EventWriter<CloseBarterUi>,
+    mut customer_handler: ResMut<CustomerHandler>,
 ) {
     for (interaction, mut color, props) in &mut interaction_query {
         match *interaction {
@@ -713,11 +714,27 @@ fn click_barter_control_button(
             BarterResolutionTypes::Approve { .. } => {
                 if let Interaction::Clicked = interaction {
                     close_ui.send_default();
+                    commands
+                        .entity(
+                            customer_handler
+                                .get_next_customer()
+                                .expect("If we are in barter we should always have a customer"),
+                        )
+                        .insert(CustomerState::Despawning);
+                    customer_handler.remove_customer_at_index(0);
                 }
             }
             BarterResolutionTypes::Deny => {
                 if let Interaction::Clicked = interaction {
                     close_ui.send_default();
+                    commands
+                        .entity(
+                            customer_handler
+                                .get_next_customer()
+                                .expect("If we are in barter we should always have a customer"),
+                        )
+                        .insert(CustomerState::Despawning);
+                    customer_handler.remove_customer_at_index(0);
                 }
             }
         }
@@ -727,7 +744,7 @@ fn click_barter_control_button(
 fn click_barter_button(
     mut commands: Commands,
     button_colors: Res<UiColors>,
-    mut barter_attempt: EventWriter<BarterAttemptResultEvent>,
+    mut barter_attempt: EventWriter<HaggleResultEvent>,
     mut interaction_query: Query<
         (&Interaction, &mut BackgroundColor, &BarterButtonProps),
         (Changed<Interaction>, With<Button>),
@@ -744,29 +761,29 @@ fn click_barter_button(
             _ => {}
         }
         match props.barter_button_type {
-            BarterTypes::Bully => {
+            HaggleType::Bully => {
                 if let Interaction::Clicked = interaction {
-                    barter_attempt.send(BarterAttemptResultEvent {
-                        result: BarterAttemptResult::Success,
-                        attempt_type: BarterTypes::Bully,
+                    barter_attempt.send(HaggleResultEvent {
+                        result: HaggleResult::Success,
+                        attempt_type: HaggleType::Bully,
                         new_price: 50,
                     })
                 }
             }
-            BarterTypes::Persuade => {
+            HaggleType::Persuade => {
                 if let Interaction::Clicked = interaction {
-                    barter_attempt.send(BarterAttemptResultEvent {
-                        result: BarterAttemptResult::Success,
-                        attempt_type: BarterTypes::Persuade,
+                    barter_attempt.send(HaggleResultEvent {
+                        result: HaggleResult::Success,
+                        attempt_type: HaggleType::Persuade,
                         new_price: 50,
                     })
                 }
             }
-            BarterTypes::Plea => {
+            HaggleType::Plea => {
                 if let Interaction::Clicked = interaction {
-                    barter_attempt.send(BarterAttemptResultEvent {
-                        result: BarterAttemptResult::Failure,
-                        attempt_type: BarterTypes::Plea,
+                    barter_attempt.send(HaggleResultEvent {
+                        result: HaggleResult::Failure,
+                        attempt_type: HaggleType::Plea,
                         new_price: 40,
                     })
                 }

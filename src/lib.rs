@@ -12,14 +12,15 @@ use crate::loading::LoadingPlugin;
 use crate::player::PlayerPlugin;
 
 use crate::barter::BarterPlugin;
+use crate::scene::ScenePlugin;
 use crate::ui::UiPlugin;
 use bevy::app::App;
 #[cfg(debug_assertions)]
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy::window::close_on_esc;
+use bevy_pixel_camera::{PixelBorderPlugin, PixelCameraPlugin};
 use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet, NextState};
-use crate::scene::ScenePlugin;
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 enum PausedState {
@@ -29,9 +30,6 @@ enum PausedState {
     Playing,
 }
 
-// This example game uses States to separate logic
-// See https://bevy-cheatbook.github.io/programming/states.html
-// Or https://github.com/bevyengine/bevy/blob/main/examples/ecs/state.rs
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 enum GameState {
     // During the loading State the LoadingPlugin will load our assets
@@ -48,6 +46,15 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugin(PixelCameraPlugin)
+            .add_plugin(PixelBorderPlugin {
+                color: Color::rgb(
+                    (62 - 0) as f32 / (255 - 0) as f32,
+                    (35 - 0) as f32 / (255 - 0) as f32,
+                    (71 - 0) as f32 / (255 - 0) as f32,
+                ),
+            });
+
         app.add_plugin(LoadingPlugin)
             .add_plugin(UiPlugin)
             .add_plugin(InternalAudioPlugin)

@@ -33,7 +33,7 @@ pub struct AsepriteHandles(Vec<Handle<Aseprite>>);
 pub struct CustomerAsepriteHandles(Vec<Handle<Aseprite>>);
 
 aseprite!(pub DapperPanda, "textures/dapper_panda.aseprite");
-aseprite!(pub ShopBackground, "textures/shop_bg - Copy.aseprite");
+aseprite!(pub ShopBackground, "textures/shop_bg.aseprite");
 
 // the following asset collections will be loaded during the State `GameState::Loading`
 // when done loading, they will be inserted as resources (see <https://github.com/NiklasEi/bevy_asset_loader>)

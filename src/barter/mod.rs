@@ -1,5 +1,8 @@
-﻿use crate::barter::customers::{CustomerHandler, CustomerPlugin};
-use crate::ui::game_scene::barter_screen::BarterButtonProps;
+﻿//! Barters are separated between two main things. A Barter and Haggle
+//! A Barter is the entire barter, trying to sell an item, attempting to barter, etc
+//! A Haggle is an individual attempt to adjust the price
+
+use crate::barter::customers::{CustomerHandler, CustomerPlugin};
 use bevy::prelude::{App, Plugin};
 
 pub mod customers;
@@ -10,55 +13,69 @@ impl Plugin for BarterPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CustomerHandler::default())
             .add_event::<BarterResolved>()
-            .add_event::<BarterAttemptEvent>()
-            .add_event::<BarterAttemptResultEvent>();
+            .add_event::<HaggleAttemptEvent>()
+            .add_event::<HaggleResultEvent>();
 
         app.add_plugin(CustomerPlugin);
     }
 }
 
+pub struct Barter {
+    sell_price: u32,
+    haggles: Vec<HaggleResultEvent>,
+}
+
+impl Barter {
+    pub fn log_result(&mut self, haggle_result: HaggleResultEvent){
+        
+    }
+    pub fn update_price(&mut self, price: u32) {
+        self.sell_price += price;
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub enum BarterTypes {
+pub enum HaggleType {
     Plea,
     Persuade,
     Bully,
 }
 
-impl BarterTypes {
-    pub fn get_string_name(barter_type: BarterTypes) -> String {
+impl HaggleType {
+    pub fn get_string_name(barter_type: HaggleType) -> String {
         return match barter_type {
-            BarterTypes::Bully => String::from("Bully"),
-            BarterTypes::Persuade => String::from("Persuade"),
-            BarterTypes::Plea => String::from("Plea"),
+            HaggleType::Bully => String::from("Bully"),
+            HaggleType::Persuade => String::from("Persuade"),
+            HaggleType::Plea => String::from("Plea"),
         };
     }
 
     pub fn get_string_name_from_instance(&self) -> String {
         return match self {
-            BarterTypes::Bully => String::from("Bully"),
-            BarterTypes::Persuade => String::from("Persuade"),
-            BarterTypes::Plea => String::from("Plea"),
+            HaggleType::Bully => String::from("Bully"),
+            HaggleType::Persuade => String::from("Persuade"),
+            HaggleType::Plea => String::from("Plea"),
         };
     }
 }
 
 /// This is an attempt. The player clicks the corresponding button and wants to try and plead or whatever
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct BarterAttemptEvent {
-    pub attempt_type: BarterTypes,
+pub struct HaggleAttemptEvent {
+    pub attempt_type: HaggleType,
 }
 
-/// This is the result of a barter attempt event
+/// This is the result of a haggle attempt event
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct BarterAttemptResultEvent {
-    pub result: BarterAttemptResult,
-    pub attempt_type: BarterTypes,
+pub struct HaggleResultEvent {
+    pub result: HaggleResult,
+    pub attempt_type: HaggleType,
     pub new_price: u32,
 }
 
-/// This is an enum used to match the the result of a barter attempt event
+/// This is an enum used to match the the result of a haggle attempt event
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub enum BarterAttemptResult {
+pub enum HaggleResult {
     Success,
     Failure,
 }

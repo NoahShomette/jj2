@@ -5,18 +5,22 @@ use bevy::prelude::*;
 use bevy::window::WindowId;
 use bevy::winit::WinitWindows;
 use bevy::DefaultPlugins;
-use seldom_state::StateMachinePlugin;
-use std::io::Cursor;
 use bevy_mod_aseprite::AsepritePlugin;
 use bevy_tiled_camera::TiledCameraPlugin;
 use bevy_tweening::TweeningPlugin;
+use seldom_state::StateMachinePlugin;
+use std::io::Cursor;
 use vampire_shopire::GamePlugin;
 use winit::window::Icon;
 
 fn main() {
     App::new()
         .insert_resource(Msaa { samples: 1 })
-        .insert_resource(ClearColor(Color::rgb(0.4, 0.4, 0.4)))
+        .insert_resource(ClearColor(Color::rgb(
+            (62 - 0) as f32 / (255 - 0) as f32,
+            (35 - 0) as f32 / (255 - 0) as f32,
+            (71 - 0) as f32 / (255 - 0) as f32,
+        )))
         .add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {

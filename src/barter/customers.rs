@@ -1,15 +1,17 @@
-﻿use crate::barter::BarterAttemptResultEvent;
-use crate::loading::CustomerAsepriteHandles;
-use crate::player::Player;
-use crate::{loading, GameState, PausedState};
+﻿use crate::loading::CustomerAsepriteHandles;
+use crate::{GameState, PausedState};
 use bevy::app::App;
 use bevy::math::Vec3;
-use bevy::prelude::{Assets, Bundle, Commands, Component, Entity, Mut, Plugin, Query, Res, ResMut, Resource, TextureAtlasSprite, Time, Transform, With};
+use bevy::prelude::{
+    Assets, Bundle, Commands, Component, Entity, Local, Plugin, Query, Res, ResMut, Resource,
+    TextureAtlasSprite, Time, Transform, With,
+};
+use bevy::time::{Timer, TimerMode};
 use bevy::utils::default;
-use bevy_mod_aseprite::{aseprite, Aseprite, AsepriteAnimation, AsepriteBundle};
+use bevy_mod_aseprite::{Aseprite, AsepriteAnimation, AsepriteBundle};
 use iyes_loopless::prelude::ConditionSet;
 use rand::{thread_rng, Rng};
-
+use std::time::Duration;
 
 pub struct CustomerPlugin;
 
@@ -32,6 +34,10 @@ impl Plugin for CustomerPlugin {
 
 pub const MAX_LEFT_CUSTOMER_BOUNDS: f32 = -120.0;
 pub const MAX_RIGHT_CUSTOMER_BOUNDS: f32 = 120.0;
+
+pub const MAX_LEFT_BARTERING_BOUNDS: f32 = -80.0;
+pub const MAX_RIGHT_BARTERING_BOUNDS: f32 = -85.0;
+
 pub const FLOOR_LEVEL: f32 = -46.0;
 
 #[derive(Resource)]
@@ -53,7 +59,7 @@ pub struct CustomerHandler {
 impl CustomerHandler {
     pub fn spawn_new_random_customer(
         &mut self,
-        mut commands: &mut Commands,
+        commands: &mut Commands,
         mut customer_aseprite_handles: &mut ResMut<CustomerAsepriteHandles>,
         aseprites: &Res<Assets<Aseprite>>,
     ) {
@@ -66,7 +72,7 @@ impl CustomerHandler {
         self.active_customers.push(entity)
     }
 
-    pub fn get_next_customer(&mut self) -> Option<Entity> {
+    pub fn get_next_customer(&self) -> Option<Entity> {
         self.active_customers.first().cloned()
     }
 
@@ -81,7 +87,7 @@ pub struct CustomerBundle {
     pub name: Name,
     pub max_purchase_amount: MaxPurchaseAmount,
     pub customer_difficulty: CustomerDifficulty,
-    pub orientation: Orientation,
+    pub orientation: CustomerState,
     pub aseprite_bundle: AsepriteBundle,
 }
 
@@ -97,7 +103,7 @@ impl CustomerBundle {
         let aseprite_handle = &customer_aseprite_handles[handle_index];
         let sprite = aseprites.get(aseprite_handle).unwrap();
         let animation = AsepriteAnimation::new(sprite.info(), "idle");
-        
+
         CustomerBundle {
             customer: Customer,
             name: Name {
@@ -112,7 +118,7 @@ impl CustomerBundle {
                 persuade_resistance: rng.gen_range(25..75),
                 plead_resistance: rng.gen_range(25..75),
             },
-            orientation: Orientation::Spawned,
+            orientation: CustomerState::Spawned,
             aseprite_bundle: AsepriteBundle {
                 aseprite: aseprite_handle.clone_weak(),
                 sprite: TextureAtlasSprite::new(animation.current_frame()),
@@ -122,7 +128,7 @@ impl CustomerBundle {
                     translation: Vec3 {
                         x: 0.0,
                         y: 200.0,
-                        z: 1.0,
+                        z: 5.0,
                     },
                     ..default()
                 },
@@ -158,10 +164,24 @@ pub struct CustomerDifficulty {
 }
 
 #[derive(Component, Debug, Clone, Copy)]
-pub enum Orientation {
-    Left,
-    Right,
+pub enum CustomerState {
+    MoveLeft,
+    MoveRight,
     Spawned,
+    Bartering,
+    Despawning,
+}
+
+pub struct SpawnTimer {
+    timer: Timer,
+}
+
+impl Default for SpawnTimer {
+    fn default() -> Self {
+        Self {
+            timer: Timer::new(Duration::from_secs_f32(1.0), TimerMode::Once),
+        }
+    }
 }
 
 pub fn spawn_customers_if_below_max_num(
@@ -170,54 +190,89 @@ pub fn spawn_customers_if_below_max_num(
     mut settings: ResMut<CustomerSettings>,
     mut customer_aseprite_handles: ResMut<CustomerAsepriteHandles>,
     aseprites: Res<Assets<Aseprite>>,
+    mut spawn_timer: Local<SpawnTimer>,
+    time: Res<Time>,
 ) {
-
-    if customers.active_customers.len() < settings.max_num as usize {
+    spawn_timer
+        .timer
+        .tick(Duration::from_secs_f32(time.delta_seconds()));
+    if customers.active_customers.len() < settings.max_num as usize && spawn_timer.timer.finished()
+    {
         println!("spawning customers");
         customers.spawn_new_random_customer(
             &mut commands,
             &mut customer_aseprite_handles,
             &aseprites,
         );
+        spawn_timer.timer = Timer::new(Duration::from_secs_f32(5.0), TimerMode::Once);
     }
 }
 
 pub fn move_customers(
-    mut customers: Query<(&mut Transform, &mut Orientation), With<Customer>>,
+    mut customers: Query<
+        (
+            Entity,
+            &mut Transform,
+            &mut CustomerState,
+            Option<&IsActiveCustomer>,
+        ),
+        With<Customer>,
+    >,
     time: Res<Time>,
+    mut commands: Commands,
 ) {
-    for (mut transform, mut orientation) in customers.iter_mut() {
-        
-        println!("{}", transform.translation);
+    for (entity, mut transform, mut orientation, is_active_customer) in customers.iter_mut() {
         match &mut *orientation {
-            Orientation::Left => {
+            CustomerState::MoveLeft => {
+                if let Some(_) = is_active_customer {
+                    *orientation = CustomerState::Bartering;
+                    return;
+                }
                 if transform.translation.x > MAX_LEFT_CUSTOMER_BOUNDS {
-                    transform.translation.x -= 35.0 * time.delta_seconds();
+                    transform.translation.x -= 25.0 * time.delta_seconds();
                 } else {
-                    *orientation = Orientation::Right;
-                    transform.translation.x += 35.0 * time.delta_seconds();
+                    *orientation = CustomerState::MoveRight;
+                    transform.translation.x += 25.0 * time.delta_seconds();
                 }
             }
-            Orientation::Right => {
+            CustomerState::MoveRight => {
+                if let Some(_) = is_active_customer {
+                    *orientation = CustomerState::Bartering;
+                    return;
+                }
                 if transform.translation.x < MAX_RIGHT_CUSTOMER_BOUNDS {
-                    transform.translation.x += 35.0 * time.delta_seconds();
+                    transform.translation.x += 25.0 * time.delta_seconds();
                 } else {
-                    *orientation = Orientation::Left;
-                    transform.translation.x -= 35.0 * time.delta_seconds();
+                    *orientation = CustomerState::MoveLeft;
+                    transform.translation.x -= 25.0 * time.delta_seconds();
                 }
             }
 
-            Orientation::Spawned => {
+            CustomerState::Spawned => {
                 if transform.translation.y > FLOOR_LEVEL {
                     transform.translation.y -= 250.0 * time.delta_seconds();
                 } else {
                     let mut rng = thread_rng();
-                    let number = rng.gen_range(0..1);
+                    let number = rng.gen_range(0..=1);
                     if number == 0 {
-                        *orientation = Orientation::Right;
+                        *orientation = CustomerState::MoveRight;
                     } else {
-                        *orientation = Orientation::Left;
+                        *orientation = CustomerState::MoveLeft;
                     }
+                }
+            }
+            CustomerState::Bartering => {
+                if transform.translation.x > MAX_RIGHT_BARTERING_BOUNDS {
+                    transform.translation.x -= 25.0 * time.delta_seconds();
+                } else if transform.translation.x < MAX_LEFT_BARTERING_BOUNDS {
+                    transform.translation.x += 25.0 * time.delta_seconds();
+                }
+            }
+            CustomerState::Despawning => {
+                if transform.translation.y > -200.0 {
+                    transform.translation.y -= 250.0 * time.delta_seconds();
+                } else {
+                    commands.entity(entity).despawn();
                 }
             }
         }

@@ -45,7 +45,10 @@ rand = { version = "0.8.3" }
 # keep the following in sync with Bevy's dependencies
 winit = { version = "0.27", default-features = false }
 image = { version = "0.24", default-features = false }
+bevy_pixel_camera = "0.3.0"
 
 [build-dependencies]
 embed-resource = "1.4"
 
+[patch.crates-io]
+bevy_aseprite_reader = { git = "https://github.com/mdenchev/bevy_aseprite", branch = "main"}

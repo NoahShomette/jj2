@@ -1,5 +1,6 @@
-﻿use crate::loading::FontAssets;
-use crate::ui::menu::{MenuButtonProps, MenuButtonType, MenuUi};
+﻿use crate::barter::customers::{CustomerHandler, CustomerState, IsActiveCustomer};
+use crate::loading::FontAssets;
+use crate::player::Gold;
 use crate::ui::{UiColors, UiState};
 use crate::{GameState, PausedState};
 use bevy::prelude::*;
@@ -19,6 +20,7 @@ impl Plugin for GameSceneUiPlugin {
                     .run_in_state(GameState::Playing)
                     .run_in_state(PausedState::Playing)
                     .with_system(click_play_button)
+                    .with_system(update_gold_count)
                     .into(),
             );
     }
@@ -50,7 +52,15 @@ pub enum GameStateButtons {
     Options,
 }
 
-fn setup_scene_ui(mut commands: Commands, font_assets: Res<FontAssets>, colors: Res<UiColors>) {
+#[derive(PartialEq, Clone, Copy, Debug, Default, Component)]
+struct GoldAmount;
+
+fn setup_scene_ui(
+    mut commands: Commands,
+    font_assets: Res<FontAssets>,
+    colors: Res<UiColors>,
+    gold: Res<Gold>,
+) {
     commands
         .spawn(NodeBundle {
             style: Style {
@@ -61,9 +71,46 @@ fn setup_scene_ui(mut commands: Commands, font_assets: Res<FontAssets>, colors: 
             },
             ..default()
         })
-        .insert(MenuUi)
+        .insert(GameUi)
         .with_children(|parent| {
-            // left vertical fill (border)
+            parent
+                .spawn(TextBundle {
+                    style: Style {
+                        size: Size::new(Val::Auto, Val::Auto),
+                        padding: UiRect::all(Val::Px(15.0)),
+                        margin: UiRect::all(Val::Px(15.0)),
+                        justify_content: JustifyContent::FlexStart,
+                        align_items: AlignItems::FlexStart,
+                        ..Default::default()
+                    },
+                    text: Text {
+                        sections: vec![TextSection {
+                            value: format!("Gold: {:?}", gold.amount).to_string(),
+                            style: TextStyle {
+                                font: font_assets.fira_sans.clone(),
+                                font_size: 40.0,
+                                color: Color::rgb(0.9, 0.9, 0.9),
+                            },
+                        }],
+                        alignment: Default::default(),
+                    },
+                    ..Default::default()
+                })
+                .insert(GoldAmount);
+        });
+
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                justify_content: JustifyContent::SpaceBetween,
+                position_type: PositionType::Absolute,
+                ..default()
+            },
+            ..default()
+        })
+        .insert(GameUi)
+        .with_children(|parent| {
             parent
                 .spawn(ButtonBundle {
                     style: Style {
@@ -77,7 +124,6 @@ fn setup_scene_ui(mut commands: Commands, font_assets: Res<FontAssets>, colors: 
                     background_color: colors.button_standard.into(),
                     ..Default::default()
                 })
-                .insert(GameUi)
                 .insert(GameMainButtonProps {
                     game_button_type: GameStateButtons::Barter,
                 })
@@ -100,6 +146,12 @@ fn setup_scene_ui(mut commands: Commands, font_assets: Res<FontAssets>, colors: 
         });
 }
 
+fn update_gold_count(mut gold_amount_query: Query<&mut Text, With<GoldAmount>>, gold: Res<Gold>) {
+    for mut text in gold_amount_query.iter_mut() {
+        text.sections[0].value = format!("Gold: {:?}", gold.amount).to_string();
+    }
+}
+
 fn click_play_button(
     mut commands: Commands,
     button_colors: Res<UiColors>,
@@ -107,6 +159,7 @@ fn click_play_button(
         (&Interaction, &mut BackgroundColor, &GameMainButtonProps),
         (Changed<Interaction>, With<Button>),
     >,
+    customer_handler: Res<CustomerHandler>,
 ) {
     for (interaction, mut color, props) in &mut interaction_query {
         match *interaction {
@@ -121,7 +174,10 @@ fn click_play_button(
         match props.game_button_type {
             GameStateButtons::Barter => {
                 if let Interaction::Clicked = interaction {
-                    commands.insert_resource(NextState(UiState::Barter));
+                    if let Some(customer) = customer_handler.get_next_customer() {
+                        commands.insert_resource(NextState(UiState::Barter));
+                        commands.entity(customer).insert(IsActiveCustomer);
+                    }
                 }
             }
             GameStateButtons::Purchase => {}
@@ -130,8 +186,8 @@ fn click_play_button(
     }
 }
 
-fn cleanup_game_ui(mut commands: Commands, button: Query<Entity, With<GameUi>>) {
-    for button in button.iter() {
-        commands.entity(button).despawn_recursive();
+fn cleanup_game_ui(mut commands: Commands, scene_uis: Query<Entity, With<GameUi>>) {
+    for ui in scene_uis.iter() {
+        commands.entity(ui).despawn_recursive();
     }
 }

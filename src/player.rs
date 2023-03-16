@@ -1,6 +1,6 @@
 use crate::GameState;
 use bevy::prelude::*;
-use bevy::sprite::MaterialMesh2dBundle;
+use bevy_pixel_camera::PixelCameraBundle;
 use bevy_tiled_camera::{TiledCameraBundle, WorldSpace};
 use iyes_loopless::prelude::{AppLooplessStateExt, ConditionSet};
 
@@ -9,10 +9,10 @@ pub struct PlayerPlugin;
 #[derive(Component)]
 pub struct Player;
 
-/// This plugin handles player related stuff like movement
-/// Player logic is only active during the State `GameState::Playing`
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<Gold>();
+        
         app.add_enter_system(GameState::MainMenu, setup_basics)
             .add_system_set(ConditionSet::new().run_in_state(GameState::Playing).into());
     }
@@ -39,7 +39,13 @@ impl Default for CameraBundle {
     }
 }
 
+#[derive(PartialEq, Clone, Copy, Debug, Default, Resource)]
+pub struct Gold {
+    pub amount: u32,
+}
+
 fn setup_basics(mut commands: Commands) {
-    //commands.spawn(Camera2dBundle::default());
-    commands.spawn((CameraBundle::default()));
+    commands
+        .spawn(PixelCameraBundle::from_resolution(320, 240))
+        .insert(CameraMarker);
 }
